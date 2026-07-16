@@ -12,6 +12,7 @@ import {
   ImageIcon,
   KeyRound,
   ListChecks,
+  LogOut,
   PanelLeft,
   Pencil,
   Play,
@@ -27,6 +28,7 @@ import {
   Zap,
 } from "lucide-react";
 import { FormEvent, ReactNode, useEffect, useMemo, useRef, useState } from "react";
+import { createClient } from "@/utils/supabase/client";
 
 type View =
   | "quick"
@@ -504,7 +506,11 @@ const emptyForm: QuickGenerateForm = {
   generateHeroImage: false,
 };
 
-export function ContentEngineApp() {
+interface ContentEngineAppProps {
+  userEmail: string;
+}
+
+export function ContentEngineApp({ userEmail }: ContentEngineAppProps) {
   const [state, setState] = useState<EngineState>(initialState);
   const [activeView, setActiveView] = useState<View>("quick");
   const [form, setForm] = useState<QuickGenerateForm>(emptyForm);
@@ -832,6 +838,12 @@ export function ContentEngineApp() {
     setToast("Demo data restored");
   }
 
+  async function signOut() {
+    const supabase = createClient();
+    await supabase.auth.signOut();
+    window.location.reload();
+  }
+
   return (
     <main className="min-h-screen bg-[#0d0f12] text-[#eef1f0]">
       <div className="grid min-h-screen lg:grid-cols-[256px_1fr]">
@@ -883,6 +895,10 @@ export function ContentEngineApp() {
               </h1>
             </div>
             <div className="flex flex-wrap items-center gap-2">
+              <div className="hidden items-center gap-2 border border-white/10 bg-white/[0.03] px-3 py-2 text-sm text-white/55 md:flex">
+                <KeyRound size={15} />
+                <span className="max-w-52 truncate">{userEmail}</span>
+              </div>
               <label className="flex min-w-0 items-center gap-2 border border-white/10 bg-[#0d0f12] px-3 py-2 text-sm text-white/60">
                 <Search size={16} />
                 <input
@@ -899,6 +915,14 @@ export function ContentEngineApp() {
               >
                 <Zap size={16} />
                 New
+              </button>
+              <button
+                className="inline-flex items-center gap-2 border border-white/10 bg-white/[0.03] px-3 py-2 text-sm text-white/60 hover:bg-white/[0.06] hover:text-white"
+                onClick={signOut}
+                type="button"
+              >
+                <LogOut size={16} />
+                Sign out
               </button>
             </div>
           </header>

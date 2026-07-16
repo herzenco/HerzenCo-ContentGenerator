@@ -1,5 +1,5 @@
 # PROJECT_MEMORY.md
-> Last updated: 2026-07-16 | Session #6 | Agent: Codex
+> Last updated: 2026-07-16 | Session #7 | Agent: Codex
 
 ---
 
@@ -31,7 +31,9 @@ Herzen Content Engine is a centralized AI content hub for generating, quality-ch
 
 The repository is initialized locally on `main` and points to `git@github.com:herzenco/HerzenCo-ContentGenerator.git`. Next.js has been scaffolded and the Phase 0 plus Update 01 and Update 02 Supabase migrations have been created. The app is now a clickable local operator console with Quick Generate, overview, properties, review queue, performance, calendar, topics, settings, model routing, and optional hero-image controls backed by browser local storage.
 
-Supabase SSR packages are installed and the app now has reusable browser/server helpers plus middleware that refreshes auth sessions. Local `.env.local` contains the Supabase project URL, publishable key, and OpenAI key; it is ignored by git.
+Supabase SSR packages are installed and the app now has reusable browser/server helpers plus middleware that refreshes auth sessions. Local `.env.local` contains the Supabase project URL, publishable key, OpenAI key, and Anthropic key; it is ignored by git.
+
+The dashboard is gated by Supabase Auth. Users can sign in or create an account with email/password only. Account creation is limited to `@herzenco.co` addresses in both the UI and the live Supabase database via the `enforce_herzenco_auth_domain` trigger on `auth.users`.
 
 ## What Was Done This Session
 
@@ -53,6 +55,11 @@ Supabase SSR packages are installed and the app now has reusable browser/server 
 - Added root Next.js middleware to refresh Supabase sessions.
 - Added `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` to `.env.example`.
 - Stored the provided Supabase URL and publishable key in local `.env.local` only.
+- Added a Supabase Auth login/create-account screen.
+- Added a server-side auth gate around the dashboard.
+- Added email confirmation callback route at `/auth/confirm`.
+- Added dashboard sign-out.
+- Added and applied the Supabase migration that blocks non-`@herzenco.co` Auth users.
 
 ## Key Decisions Made
 
@@ -94,6 +101,8 @@ Supabase SSR packages are installed and the app now has reusable browser/server 
 - [ ] Implement real provider calls for Anthropic/OpenAI on the server, with timeout/fallback logging in `job_runs`.
 - [ ] Connect hero image generation to OpenAI Images and upload outputs into the public `hero-images` Supabase Storage bucket.
 - [ ] Expose `hero_image_url`, `hero_image_alt`, and `social_meta.ogImage` through the Content API.
+- [ ] Configure Supabase Auth Site URL and redirect URLs for production once the Vercel URL/domain is known.
+- [ ] Consider custom SMTP before production usage; Supabase default email has tight rate limits.
 
 ## Environment & Config Notes
 
@@ -109,6 +118,8 @@ Initial migration: `supabase/migrations/20260714120000_initial_schema.sql`.
 Update 01 migration: `supabase/migrations/20260714143000_update_01_properties_performance_seo.sql`.
 
 Update 02 migration: `supabase/migrations/20260715093000_update_02_model_routing_images.sql`.
+
+Auth migration: `supabase/migrations/20260716151500_auth_herzenco_domain.sql`.
 
 Tables: `properties`, `brand_profiles`, `topics`, `content_items`, `content_versions`, `eval_results`, `jobs`, `job_runs`, `schedules`, `api_keys`, `prompt_templates`.
 
@@ -137,6 +148,16 @@ Branch/Commit: `main`, no commit yet
 Summary: Installed Supabase SSR/client packages, added browser/server/middleware helpers, enabled session refresh middleware, and saved the provided Supabase project env locally without committing secrets.
 
 Files changed: `package.json`, `package-lock.json`, `.env.example`, `middleware.ts`, `src/utils/supabase/*`, project memory.
+
+### Session #7 - 2026-07-16
+
+Agent: Codex
+
+Branch/Commit: `main`, no commit yet
+
+Summary: Added Supabase email/password auth gate for the operator console, restricted account creation to `@herzenco.co`, added email confirmation callback, sign-out, and applied the live Supabase Auth domain trigger migration.
+
+Files changed: `src/app/page.tsx`, `src/app/auth/confirm/route.ts`, `src/components/auth-form.tsx`, `src/components/content-engine-app.tsx`, `supabase/migrations/20260716151500_auth_herzenco_domain.sql`, project memory.
 
 ### Session #5 - 2026-07-15
 
