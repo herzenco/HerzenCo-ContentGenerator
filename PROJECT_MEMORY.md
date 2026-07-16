@@ -1,5 +1,5 @@
 # PROJECT_MEMORY.md
-> Last updated: 2026-07-15 | Session #5 | Agent: Codex
+> Last updated: 2026-07-16 | Session #6 | Agent: Codex
 
 ---
 
@@ -11,7 +11,7 @@ Herzen Content Engine is a centralized AI content hub for generating, quality-ch
 
 - Frontend/backend: Next.js 16 App Router, React 19, TypeScript
 - Styling: Tailwind CSS 4, Geist fonts
-- Database/auth/storage: Supabase Postgres, RLS, Auth, Storage later
+- Database/auth/storage: Supabase Postgres, RLS, Auth, Storage; Next.js SSR helpers installed
 - Hosting: Vercel
 - AI: Anthropic API planned for Phase 1 behind a provider interface
 - Email: Resend planned for later failure alerts and newsletters
@@ -19,6 +19,8 @@ Herzen Content Engine is a centralized AI content hub for generating, quality-ch
 ## File & Folder Map
 
 - `src/app/` - Next.js App Router routes and global app shell
+- `src/utils/supabase/` - Browser, server, and middleware Supabase SSR clients
+- `middleware.ts` - Supabase session refresh middleware for Next.js requests
 - `supabase/migrations/` - SQL migrations for the content engine schema
 - `supabase/seed.sql` - Seed data for launch properties and brand profiles
 - `.env.example` - Required environment variable names without secrets
@@ -28,6 +30,8 @@ Herzen Content Engine is a centralized AI content hub for generating, quality-ch
 ## Current State
 
 The repository is initialized locally on `main` and points to `git@github.com:herzenco/HerzenCo-ContentGenerator.git`. Next.js has been scaffolded and the Phase 0 plus Update 01 and Update 02 Supabase migrations have been created. The app is now a clickable local operator console with Quick Generate, overview, properties, review queue, performance, calendar, topics, settings, model routing, and optional hero-image controls backed by browser local storage.
+
+Supabase SSR packages are installed and the app now has reusable browser/server helpers plus middleware that refreshes auth sessions. Local `.env.local` contains the Supabase project URL, publishable key, and OpenAI key; it is ignored by git.
 
 ## What Was Done This Session
 
@@ -44,6 +48,11 @@ The repository is initialized locally on `main` and points to `git@github.com:he
 - Installed `lucide-react` for dashboard icons.
 - Implemented Update 01 in the local console: Properties nav/detail pages, profile completeness, brand context docs, context-enforced Quick Generate, context hashes, Brand Alignment QA, SEO/AEO hard gates, social meta, Performance pageview analytics, Search Console graceful-degradation UI, and the metrics beacon endpoint/snippet.
 - Implemented Update 02 in the local console: model registry, routing rules, fallback model-call logging, Settings Models UI, property image opt-in, visual profile fields, Quick Generate image checkbox, review/current-run image display, image regenerate action, and hero image migration/provider scaffolding.
+- Installed `@supabase/supabase-js` and `@supabase/ssr`.
+- Added Supabase browser, server, and middleware helpers.
+- Added root Next.js middleware to refresh Supabase sessions.
+- Added `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` to `.env.example`.
+- Stored the provided Supabase URL and publishable key in local `.env.local` only.
 
 ## Key Decisions Made
 
@@ -64,7 +73,7 @@ The repository is initialized locally on `main` and points to `git@github.com:he
 - GitHub SSH clone failed earlier because local host-key verification is not set up; the remote is configured, but pushing may still require SSH setup.
 - npm reported two moderate advisories in installed dependencies during scaffold generation; no forced audit fix has been run.
 - The app uses local browser storage and simulated pipeline transitions; Supabase persistence, Anthropic calls, cron processing, and real API routes are not wired yet.
-- The metrics beacon endpoint currently validates payloads and returns a local stub; it does not yet upsert `content_metrics_daily` until Supabase server helpers are added.
+- The metrics beacon endpoint currently validates payloads and returns a local stub; it still needs to be wired to upsert `content_metrics_daily` through the new Supabase server helpers.
 - Provider clients are interface scaffolds only; real Anthropic/OpenAI calls still need the production provider implementation and server-side secret wiring.
 - Local hero image generation attaches deterministic placeholder paths until OpenAI Images and Supabase Storage upload are wired.
 
@@ -75,7 +84,7 @@ The repository is initialized locally on `main` and points to `git@github.com:he
 - [ ] Start Phase 1: add Anthropic provider abstraction, prompt template seeds, and structured output parsing with Zod.
 - [ ] Replace local-storage state with Supabase-backed reads/writes once the project is linked.
 - [ ] In Phase 2, implement internal `POST /api/engine/generate` with the Quick Generate contract and status polling via `GET /api/engine/content/:contentItemId`.
-- [ ] Add lazy Supabase server client helpers when application code starts reading/writing the database.
+- [x] Add lazy Supabase server client helpers when application code starts reading/writing the database.
 - [ ] Resolve GitHub SSH host verification before the first push.
 - [ ] Wire `brand_context_docs`, `content_metrics_daily`, `context_hash`, and `social_meta` to Supabase reads/writes.
 - [ ] Replace the local SEO/AEO simulation with persisted `eval_results` rows in the real pipeline.
@@ -88,7 +97,7 @@ The repository is initialized locally on `main` and points to `git@github.com:he
 
 ## Environment & Config Notes
 
-- Required early env vars: `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `ANTHROPIC_API_KEY`, `CRON_SECRET`, `ENGINE_BASE_URL`.
+- Required early env vars: `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` or `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `ANTHROPIC_API_KEY`, `CRON_SECRET`, `ENGINE_BASE_URL`.
 - Later optional env vars: `RESEND_API_KEY`, `OPENAI_API_KEY`, `REPLICATE_API_TOKEN`, `GSC_CLIENT_ID`, `GSC_CLIENT_SECRET`, `GSC_REFRESH_TOKEN`.
 - Real secret values should go in `.env.local` and Vercel, never in Git.
 - Target-site env vars later: `CONTENT_ENGINE_URL`, `REVALIDATE_SECRET`.
@@ -118,6 +127,16 @@ Seed data: `supabase/seed.sql` inserts `herzenco` and `humanismo-evolutivo` prop
 - Launch sites: `https://herzenco.co`, `https://humanismoevolutivo.com`
 
 ## Session Log
+
+### Session #6 - 2026-07-16
+
+Agent: Codex
+
+Branch/Commit: `main`, no commit yet
+
+Summary: Installed Supabase SSR/client packages, added browser/server/middleware helpers, enabled session refresh middleware, and saved the provided Supabase project env locally without committing secrets.
+
+Files changed: `package.json`, `package-lock.json`, `.env.example`, `middleware.ts`, `src/utils/supabase/*`, project memory.
 
 ### Session #5 - 2026-07-15
 
