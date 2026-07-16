@@ -1,0 +1,32 @@
+{
+  "project_name": "HerzenCo-ContentGenerator",
+  "databases": [
+    {
+      "name": "content_engine_supabase",
+      "type": "supabase",
+      "project_id": "cxfdwlbbalofjmgwlrhx",
+      "connection_env": "SUPABASE_SERVICE_ROLE_KEY",
+      "url_env": "NEXT_PUBLIC_SUPABASE_URL",
+      "critical_tables": [
+        "properties",
+        "brand_profiles",
+        "brand_context_docs",
+        "topics",
+        "content_items",
+        "content_versions",
+        "eval_results",
+        "jobs",
+        "job_runs",
+        "schedules",
+        "api_keys",
+        "prompt_templates",
+        "models",
+        "routing_rules",
+        "content_metrics_daily"
+      ],
+      "always_backup": true
+    }
+  ],
+  "protected_branches": ["main", "production", "staging"],
+  "risk_level": "paranoid"
+}
