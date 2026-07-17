@@ -50,7 +50,7 @@ type ContentStatus =
   | "rejected"
   | "failed";
 type TopicStatus = "backlog" | "briefed" | "drafted" | "published" | "rejected";
-type ContentSource = "quick_generate" | "api" | "schedule" | "repurpose";
+type ContentSource = "quick_generate" | "api" | "schedule" | "repurpose" | "autopilot";
 type ModelProvider = "anthropic" | "openai" | "google" | "replicate";
 type ModelCapability = "text" | "image_gen" | "vision";
 type QualityTier = "fast" | "standard" | "premium";
@@ -60,9 +60,11 @@ type RoutingTask =
   | "qa"
   | "faq"
   | "meta"
+  | "autopilot_prompt"
   | "image_brief"
   | "image_gen"
   | "image_check";
+type AutopilotCadence = "daily" | "weekly" | "biweekly" | "monthly" | "custom";
 
 interface PropertyConfig {
   slug: PropertySlug;
@@ -127,6 +129,32 @@ interface Topic {
   priority: number;
   status: TopicStatus;
   source: "manual" | "ai_suggested" | "lupe";
+}
+
+interface AutopilotSetting {
+  property: PropertySlug;
+  enabled: boolean;
+  cadence: AutopilotCadence;
+  customCron: string;
+  piecesPerCycle: number;
+  publishTime: string;
+  publishDays: string[];
+  contentType: ContentItem["contentType"];
+  maxQueued: number;
+  backlogPriorityThreshold: number;
+  lastRunAt?: string;
+  nextRunAt?: string;
+}
+
+interface AutopilotWarning {
+  id: string;
+  property: PropertySlug;
+  code:
+    | "autopilot_skipped_queue_full"
+    | "brand_profile_incomplete"
+    | "autopilot_skipped_duplicate";
+  detail: string;
+  createdAt: string;
 }
 
 interface BrandProfile {
@@ -207,6 +235,8 @@ interface EngineState {
   metrics: ContentMetricDaily[];
   models: ModelRegistryEntry[];
   routingRules: RoutingRule[];
+  autopilotSettings: AutopilotSetting[];
+  autopilotWarnings: AutopilotWarning[];
   gscConnected: boolean;
   cron: string;
   apiKeys: { id: string; name: string; scopes: string[]; createdAt: string }[];
@@ -225,6 +255,16 @@ interface QuickGenerateForm {
 }
 
 const storageKey = "herzen-content-engine-state-v1";
+
+const weekDays = [
+  { value: "mon", label: "Mon" },
+  { value: "tue", label: "Tue" },
+  { value: "wed", label: "Wed" },
+  { value: "thu", label: "Thu" },
+  { value: "fri", label: "Fri" },
+  { value: "sat", label: "Sat" },
+  { value: "sun", label: "Sun" },
+] as const;
 
 const navItems: {
   view: View;
@@ -471,6 +511,15 @@ const initialState: EngineState = {
       active: true,
     },
     {
+      id: "model_openai_premium_text",
+      provider: "openai",
+      modelId: "gpt-4.1",
+      displayName: "OpenAI GPT-4.1",
+      capabilities: ["text"],
+      qualityTier: "premium",
+      active: true,
+    },
+    {
       id: "model_openai_image",
       provider: "openai",
       modelId: "gpt-image-1",
@@ -481,7 +530,70 @@ const initialState: EngineState = {
       active: true,
     },
   ],
-  routingRules: [],
+  routingRules: [
+    {
+      id: "rule_update03_draft_openai",
+      task: "draft",
+      property: "all",
+      contentType: "all",
+      language: "all",
+      modelChain: ["model_openai_premium_text", "model_claude_sonnet"],
+      priority: 0,
+      active: true,
+      notes: "Update 03 routing flip: OpenAI drafts first, Anthropic premium fallback.",
+    },
+    {
+      id: "rule_update03_qa_anthropic",
+      task: "qa",
+      property: "all",
+      contentType: "all",
+      language: "all",
+      modelChain: ["model_claude_sonnet", "model_openai_text"],
+      priority: 0,
+      active: true,
+      notes: "Update 03 routing flip: Anthropic QA first, OpenAI standard fallback.",
+    },
+    {
+      id: "rule_update03_autopilot_prompt",
+      task: "autopilot_prompt",
+      property: "all",
+      contentType: "all",
+      language: "all",
+      modelChain: ["model_claude_sonnet", "model_openai_text"],
+      priority: 0,
+      active: true,
+      notes: "Default routed model call for Autopilot prompt generation.",
+    },
+  ],
+  autopilotSettings: [
+    {
+      property: "herzenco",
+      enabled: false,
+      cadence: "weekly",
+      customCron: "",
+      piecesPerCycle: 1,
+      publishTime: "09:00",
+      publishDays: ["tue"],
+      contentType: "article",
+      maxQueued: 3,
+      backlogPriorityThreshold: 7,
+      nextRunAt: "2026-07-21T09:00:00.000Z",
+    },
+    {
+      property: "humanismo-evolutivo",
+      enabled: false,
+      cadence: "weekly",
+      customCron: "",
+      piecesPerCycle: 1,
+      publishTime: "09:00",
+      publishDays: ["thu"],
+      contentType: "article",
+      maxQueued: 3,
+      backlogPriorityThreshold: 7,
+      nextRunAt: "2026-07-23T09:00:00.000Z",
+    },
+  ],
+  autopilotWarnings: [],
   gscConnected: false,
   cron: "0 9 * * 1,3",
   apiKeys: [
@@ -798,6 +910,182 @@ export function ContentEngineApp({ userEmail }: ContentEngineAppProps) {
     setToast("Topic loaded");
   }
 
+  function runAutopilotCycle(propertySlug: PropertySlug) {
+    const setting = state.autopilotSettings.find((entry) => entry.property === propertySlug);
+    const property = state.properties.find((entry) => entry.slug === propertySlug);
+    if (!setting || !property) return;
+
+    const profile = getProfileCompleteness(state, propertySlug);
+    if (!profile.complete) {
+      addAutopilotWarning(
+        propertySlug,
+        "brand_profile_incomplete",
+        `Autopilot skipped ${property.domain}: missing ${profile.missing.join(", ")}.`,
+      );
+      setToast("Autopilot skipped: profile incomplete");
+      return;
+    }
+
+    const unpublishedAutopilot = state.content.filter(
+      (item) =>
+        item.property === propertySlug &&
+        item.source === "autopilot" &&
+        !["published", "rejected", "failed"].includes(item.status),
+    );
+    if (unpublishedAutopilot.length >= setting.maxQueued) {
+      addAutopilotWarning(
+        propertySlug,
+        "autopilot_skipped_queue_full",
+        `${property.domain} already has ${unpublishedAutopilot.length} unpublished autopilot items.`,
+      );
+      setToast("Autopilot skipped: queue full");
+      return;
+    }
+
+    const brandContext = assembleBrandContext(state, propertySlug);
+    const highPriorityBacklog = [...state.topics]
+      .filter(
+        (topic) =>
+          topic.property === propertySlug &&
+          topic.status === "backlog" &&
+          topic.priority >= setting.backlogPriorityThreshold,
+      )
+      .sort((a, b) => b.priority - a.priority);
+    const createdItems: ContentItem[] = [];
+    const consumedTopicIds = new Set<string>();
+    const warnings: AutopilotWarning[] = [];
+
+    for (let index = 0; index < setting.piecesPerCycle; index += 1) {
+      const backlogTopic = highPriorityBacklog.find(
+        (topic) => !consumedTopicIds.has(topic.id),
+      );
+      if (backlogTopic) consumedTopicIds.add(backlogTopic.id);
+
+      let promptPlan = makeAutopilotPromptPlan(
+        state,
+        property,
+        setting,
+        backlogTopic,
+        index,
+      );
+      let duplicate = findDuplicateCandidate(state, propertySlug, promptPlan.title, promptPlan.keywords);
+      if (duplicate) {
+        promptPlan = makeAutopilotPromptPlan(
+          state,
+          property,
+          setting,
+          backlogTopic,
+          index + 1,
+          duplicate.title,
+        );
+        duplicate = findDuplicateCandidate(state, propertySlug, promptPlan.title, promptPlan.keywords);
+      }
+      if (duplicate) {
+        warnings.push({
+          id: makeId("autowarn"),
+          property: propertySlug,
+          code: "autopilot_skipped_duplicate",
+          detail: `${property.domain} skipped a near-duplicate of "${duplicate.title}".`,
+          createdAt: new Date().toISOString(),
+        });
+        continue;
+      }
+
+      const primaryKeyword = promptPlan.keywords[0] ?? promptPlan.title.split(" ").slice(0, 2).join(" ");
+      const excerpt = makeExcerpt(promptPlan.prompt, property.language);
+      const metaDescription = makeMetaDescription(excerpt, primaryKeyword, property.language);
+      const id = makeId("ci");
+      createdItems.push({
+        id,
+        title: promptPlan.title,
+        property: propertySlug,
+        prompt: promptPlan.prompt,
+        contentType: setting.contentType,
+        status: "drafting",
+        source: "autopilot",
+        keywords: promptPlan.keywords,
+        toneOverride: `Autopilot pillar: ${promptPlan.pillar}. ${promptPlan.noveltyRationale}`,
+        qualityScore: null,
+        publishAt: makeAutopilotPublishAt(setting, index),
+        publishedAt: "",
+        createdAt: new Date().toISOString(),
+        excerpt,
+        metaTitle: promptPlan.title.slice(0, 60),
+        metaDescription,
+        evals: [],
+        body: makeBody(promptPlan.title, promptPlan.prompt, property.language, brandContext, primaryKeyword),
+        contextHash: hashString(brandContext),
+        socialMeta: {
+          ogTitle: promptPlan.title.slice(0, 60),
+          ogDescription: metaDescription,
+          ogType: "article",
+        },
+        imageStatus: "off",
+        imageCheck: "Hero image generation is off for autopilot unless requested from review.",
+      });
+    }
+
+    if (!createdItems.length) {
+      setState((current) => ({
+        ...current,
+        autopilotWarnings: [...warnings, ...current.autopilotWarnings].slice(0, 12),
+      }));
+      setToast("Autopilot skipped: duplicate guard");
+      return;
+    }
+
+    setState((current) => ({
+      ...current,
+      content: [...createdItems, ...current.content],
+      topics: current.topics.map((topic) =>
+        consumedTopicIds.has(topic.id) ? { ...topic, status: "drafted" } : topic,
+      ),
+      autopilotWarnings: [...warnings, ...current.autopilotWarnings].slice(0, 12),
+      autopilotSettings: current.autopilotSettings.map((entry) =>
+        entry.property === propertySlug
+          ? {
+              ...entry,
+              lastRunAt: new Date().toISOString(),
+              nextRunAt: nextAutopilotRun(entry),
+            }
+          : entry,
+      ),
+    }));
+    setSelectedContentId(createdItems[0].id);
+    setToast(`Autopilot created ${createdItems.length} draft${createdItems.length === 1 ? "" : "s"}`);
+    createdItems.forEach((item) => finishPipeline(item, false));
+  }
+
+  function addAutopilotWarning(
+    property: PropertySlug,
+    code: AutopilotWarning["code"],
+    detail: string,
+  ) {
+    setState((current) => ({
+      ...current,
+      autopilotWarnings: [
+        { id: makeId("autowarn"), property, code, detail, createdAt: new Date().toISOString() },
+        ...current.autopilotWarnings,
+      ].slice(0, 12),
+    }));
+  }
+
+  function updateAutopilotSetting(property: PropertySlug, patch: Partial<AutopilotSetting>) {
+    setState((current) => ({
+      ...current,
+      autopilotSettings: current.autopilotSettings.map((entry) =>
+        entry.property === property
+          ? {
+              ...entry,
+              ...patch,
+              piecesPerCycle: Math.min(5, Math.max(1, patch.piecesPerCycle ?? entry.piecesPerCycle)),
+              maxQueued: Math.max(1, patch.maxQueued ?? entry.maxQueued),
+            }
+          : entry,
+      ),
+    }));
+  }
+
   function updateBrand(property: PropertySlug, patch: Partial<BrandProfile>) {
     setState((current) => ({
       ...current,
@@ -946,8 +1234,11 @@ export function ContentEngineApp({ userEmail }: ContentEngineAppProps) {
             )}
             {activeView === "overview" && (
               <OverviewView
+                autopilotSettings={state.autopilotSettings}
+                autopilotWarnings={state.autopilotWarnings}
                 content={filteredContent}
                 onPublish={publishNow}
+                onRunAutopilot={runAutopilotCycle}
                 onSelect={(id) => {
                   setSelectedContentId(id);
                   setActiveView("review");
@@ -958,6 +1249,7 @@ export function ContentEngineApp({ userEmail }: ContentEngineAppProps) {
             {activeView === "properties" && (
               <PropertiesView
                 brands={state.brands}
+                autopilotSettings={state.autopilotSettings}
                 content={filteredContent}
                 contextDocs={state.contextDocs}
                 onAddProperty={(property) =>
@@ -980,6 +1272,10 @@ export function ContentEngineApp({ userEmail }: ContentEngineAppProps) {
                       },
                       ...current.brands,
                     ],
+                    autopilotSettings: [
+                      makeDefaultAutopilotSetting(property.slug),
+                      ...current.autopilotSettings,
+                    ],
                   }))
                 }
                 onDeleteDoc={(id) =>
@@ -991,10 +1287,12 @@ export function ContentEngineApp({ userEmail }: ContentEngineAppProps) {
                 onSelectProperty={setSelectedPropertySlug}
                 onSetTab={setPropertyTab}
                 onPublish={publishNow}
+                onRunAutopilot={runAutopilotCycle}
                 onSelectContent={(id) => {
                   setSelectedContentId(id);
                   setActiveView("review");
                 }}
+                onUpdateAutopilotSetting={updateAutopilotSetting}
                 onUpdateBrand={updateBrand}
                 onUpdateDoc={(doc) =>
                   setState((current) => ({
@@ -1274,13 +1572,19 @@ function QuickGenerateView({
 }
 
 function OverviewView({
+  autopilotSettings,
+  autopilotWarnings,
   content,
   onPublish,
+  onRunAutopilot,
   onSelect,
   properties,
 }: {
+  autopilotSettings: AutopilotSetting[];
+  autopilotWarnings: AutopilotWarning[];
   content: ContentItem[];
   onPublish: (id: string) => void;
+  onRunAutopilot: (property: PropertySlug) => void;
   onSelect: (id: string) => void;
   properties: PropertyConfig[];
 }) {
@@ -1336,6 +1640,59 @@ function OverviewView({
                 </div>
               </div>
             ))}
+          </div>
+        </Panel>
+      </div>
+
+      <div className="grid gap-5 xl:grid-cols-2">
+        <Panel title="Next autopilot runs">
+          <div className="space-y-3">
+            {autopilotSettings.map((setting) => {
+              const property = properties.find((entry) => entry.slug === setting.property);
+              return (
+                <div className="grid gap-3 border border-white/10 bg-white/[0.025] p-3 md:grid-cols-[1fr_auto]" key={setting.property}>
+                  <div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <p className="font-medium">{property?.domain ?? setting.property}</p>
+                      <Badge tone={setting.enabled ? "green" : "gray"}>
+                        {setting.enabled ? "On" : "Off"}
+                      </Badge>
+                    </div>
+                    <p className="mt-1 text-sm text-white/55">
+                      {autopilotSummary(setting)}
+                    </p>
+                    <p className="mt-2 font-mono text-xs text-white/40">
+                      Next: {setting.nextRunAt ? formatDateTime(setting.nextRunAt) : "not scheduled"}
+                    </p>
+                  </div>
+                  <ActionButton
+                    icon={<Zap size={16} />}
+                    label="Run"
+                    onClick={() => onRunAutopilot(setting.property)}
+                    tone="cyan"
+                  />
+                </div>
+              );
+            })}
+          </div>
+        </Panel>
+
+        <Panel title="Autopilot warnings">
+          <div className="space-y-2">
+            {autopilotWarnings.map((warning) => (
+              <div className="border border-amber-300/25 bg-amber-300/10 p-3" key={warning.id}>
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <Badge tone="amber">{warning.code}</Badge>
+                  <span className="font-mono text-xs text-amber-100/60">
+                    {formatDateTime(warning.createdAt)}
+                  </span>
+                </div>
+                <p className="mt-2 text-sm text-amber-100/85">{warning.detail}</p>
+              </div>
+            ))}
+            {autopilotWarnings.length === 0 && (
+              <EmptyState icon={<Zap size={20} />} label="No skipped cycles" />
+            )}
           </div>
         </Panel>
       </div>
@@ -1477,7 +1834,17 @@ function CalendarView({
               </p>
             </div>
             <div>
-              <p className="font-medium">{item.title}</p>
+              <div className="flex flex-wrap items-center gap-2">
+                {item.source === "autopilot" && (
+                  <Badge tone="cyan">
+                    <span className="inline-flex items-center gap-1">
+                      <Zap size={13} />
+                      Autopilot
+                    </span>
+                  </Badge>
+                )}
+                <p className="font-medium">{item.title}</p>
+              </div>
               <p className="mt-1 text-sm text-white/55">{item.excerpt}</p>
             </div>
             <div className="flex items-center justify-end">
@@ -1585,6 +1952,7 @@ function TopicsView({
 }
 
 function PropertiesView({
+  autopilotSettings,
   brands,
   content,
   contextDocs,
@@ -1592,8 +1960,10 @@ function PropertiesView({
   onDeleteDoc,
   onSelectProperty,
   onPublish,
+  onRunAutopilot,
   onSetTab,
   onSelectContent,
+  onUpdateAutopilotSetting,
   onUpdateBrand,
   onUpdateDoc,
   onUpdateProperty,
@@ -1602,15 +1972,18 @@ function PropertiesView({
   propertyTab,
   selectedPropertySlug,
 }: {
+  autopilotSettings: AutopilotSetting[];
   brands: BrandProfile[];
   content: ContentItem[];
   contextDocs: BrandContextDoc[];
   onAddProperty: (property: PropertyConfig) => void;
   onDeleteDoc: (id: string) => void;
   onPublish: (id: string) => void;
+  onRunAutopilot: (property: PropertySlug) => void;
   onSelectProperty: (slug: PropertySlug) => void;
   onSelectContent: (id: string) => void;
   onSetTab: (tab: "profile" | "content" | "settings") => void;
+  onUpdateAutopilotSetting: (property: PropertySlug, patch: Partial<AutopilotSetting>) => void;
   onUpdateBrand: (property: PropertySlug, patch: Partial<BrandProfile>) => void;
   onUpdateDoc: (doc: BrandContextDoc) => void;
   onUpdateProperty: (slug: PropertySlug, patch: Partial<PropertyConfig>) => void;
@@ -1620,9 +1993,13 @@ function PropertiesView({
   selectedPropertySlug: PropertySlug;
 }) {
   const [showAddProperty, setShowAddProperty] = useState(false);
+  const [sourceFilter, setSourceFilter] = useState<ContentSource | "all">("all");
   const selectedProperty =
     properties.find((property) => property.slug === selectedPropertySlug) ??
     properties[0];
+  const autopilotSetting =
+    autopilotSettings.find((setting) => setting.property === selectedProperty.slug) ??
+    makeDefaultAutopilotSetting(selectedProperty.slug);
   const brand = brands.find((entry) => entry.property === selectedProperty.slug);
   const docs = contextDocs
     .filter((doc) => doc.property === selectedProperty.slug)
@@ -2037,15 +2414,197 @@ function PropertiesView({
         )}
 
         {propertyTab === "content" && (
-          <ContentTable
-            content={content.filter((item) => item.property === selectedProperty.slug)}
-            onPublish={onPublish}
-            onSelect={onSelectContent}
-          />
+          <div className="space-y-3">
+            <div className="flex flex-wrap items-center gap-2">
+              {(["all", "quick_generate", "autopilot", "api", "schedule", "repurpose"] as const).map((source) => (
+                <button
+                  className={`border px-3 py-2 text-sm ${
+                    sourceFilter === source
+                      ? "border-emerald-300/35 bg-emerald-300/10 text-emerald-100"
+                      : "border-white/10 text-white/60 hover:bg-white/[0.04]"
+                  }`}
+                  key={source}
+                  onClick={() => setSourceFilter(source)}
+                  type="button"
+                >
+                  {source === "all" ? "All" : sourceLabel(source)}
+                </button>
+              ))}
+            </div>
+            <ContentTable
+              content={content.filter(
+                (item) =>
+                  item.property === selectedProperty.slug &&
+                  (sourceFilter === "all" || item.source === sourceFilter),
+              )}
+              onPublish={onPublish}
+              onSelect={onSelectContent}
+            />
+          </div>
         )}
 
         {propertyTab === "settings" && (
           <div className="space-y-4">
+            <div className="border border-emerald-300/20 bg-emerald-300/10 p-4">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                <div>
+                  <p className="font-medium text-emerald-100">Autopilot</p>
+                  <p className="mt-1 text-sm text-emerald-100/70">
+                    {autopilotSummary(autopilotSetting)}
+                  </p>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <label className="flex items-center gap-2 text-sm text-emerald-100/80">
+                    <input
+                      checked={autopilotSetting.enabled}
+                      className="accent-emerald-300"
+                      onChange={(event) =>
+                        onUpdateAutopilotSetting(selectedProperty.slug, {
+                          enabled: event.target.checked,
+                        })
+                      }
+                      type="checkbox"
+                    />
+                    Enabled
+                  </label>
+                  <ActionButton
+                    icon={<Zap size={16} />}
+                    label="Run now"
+                    onClick={() => onRunAutopilot(selectedProperty.slug)}
+                    tone="green"
+                  />
+                </div>
+              </div>
+
+              <div className="mt-4 grid gap-3 md:grid-cols-2">
+                <Field label="Cadence">
+                  <select
+                    className={fieldClass}
+                    onChange={(event) =>
+                      onUpdateAutopilotSetting(selectedProperty.slug, {
+                        cadence: event.target.value as AutopilotCadence,
+                      })
+                    }
+                    value={autopilotSetting.cadence}
+                  >
+                    <option value="daily">Daily</option>
+                    <option value="weekly">Weekly</option>
+                    <option value="biweekly">Biweekly</option>
+                    <option value="monthly">Monthly</option>
+                    <option value="custom">Custom cron</option>
+                  </select>
+                </Field>
+                <Field label="Pieces per cycle">
+                  <input
+                    className={fieldClass}
+                    max={5}
+                    min={1}
+                    onChange={(event) =>
+                      onUpdateAutopilotSetting(selectedProperty.slug, {
+                        piecesPerCycle: Number(event.target.value),
+                      })
+                    }
+                    type="number"
+                    value={autopilotSetting.piecesPerCycle}
+                  />
+                </Field>
+                {autopilotSetting.cadence === "custom" && (
+                  <Field label="Custom cron">
+                    <input
+                      className={fieldClass}
+                      onChange={(event) =>
+                        onUpdateAutopilotSetting(selectedProperty.slug, {
+                          customCron: event.target.value,
+                        })
+                      }
+                      value={autopilotSetting.customCron}
+                    />
+                  </Field>
+                )}
+                <Field label="Publish time">
+                  <input
+                    className={fieldClass}
+                    onChange={(event) =>
+                      onUpdateAutopilotSetting(selectedProperty.slug, {
+                        publishTime: event.target.value,
+                      })
+                    }
+                    type="time"
+                    value={autopilotSetting.publishTime}
+                  />
+                </Field>
+                <Field label="Content type">
+                  <select
+                    className={fieldClass}
+                    onChange={(event) =>
+                      onUpdateAutopilotSetting(selectedProperty.slug, {
+                        contentType: event.target.value as ContentItem["contentType"],
+                      })
+                    }
+                    value={autopilotSetting.contentType}
+                  >
+                    <option value="article">Article</option>
+                    <option value="newsletter">Newsletter</option>
+                    <option value="social_post">Social post</option>
+                  </select>
+                </Field>
+                <Field label="Max queued">
+                  <input
+                    className={fieldClass}
+                    min={1}
+                    onChange={(event) =>
+                      onUpdateAutopilotSetting(selectedProperty.slug, {
+                        maxQueued: Number(event.target.value),
+                      })
+                    }
+                    type="number"
+                    value={autopilotSetting.maxQueued}
+                  />
+                </Field>
+                <Field label="Backlog priority threshold">
+                  <input
+                    className={fieldClass}
+                    max={10}
+                    min={1}
+                    onChange={(event) =>
+                      onUpdateAutopilotSetting(selectedProperty.slug, {
+                        backlogPriorityThreshold: Number(event.target.value),
+                      })
+                    }
+                    type="number"
+                    value={autopilotSetting.backlogPriorityThreshold}
+                  />
+                </Field>
+              </div>
+
+              <div className="mt-4 flex flex-wrap gap-2">
+                {weekDays.map((day) => (
+                  <label
+                    className={`flex items-center gap-2 border px-3 py-2 text-sm ${
+                      autopilotSetting.publishDays.includes(day.value)
+                        ? "border-emerald-300/35 bg-emerald-300/10 text-emerald-100"
+                        : "border-white/10 text-white/60"
+                    }`}
+                    key={day.value}
+                  >
+                    <input
+                      checked={autopilotSetting.publishDays.includes(day.value)}
+                      className="accent-emerald-300"
+                      onChange={(event) => {
+                        const nextDays = event.target.checked
+                          ? [...autopilotSetting.publishDays, day.value]
+                          : autopilotSetting.publishDays.filter((value) => value !== day.value);
+                        onUpdateAutopilotSetting(selectedProperty.slug, {
+                          publishDays: nextDays.length ? nextDays : [day.value],
+                        });
+                      }}
+                      type="checkbox"
+                    />
+                    {day.label}
+                  </label>
+                ))}
+              </div>
+            </div>
             <label className="flex items-center justify-between gap-3 border border-white/10 bg-white/[0.025] p-4 text-sm text-white/70">
               <span>
                 <span className="block font-medium text-white">Hero images</span>
@@ -2486,7 +3045,7 @@ function SettingsView({
           <form className="grid gap-3 border border-white/10 bg-[#0d0f12] p-3 md:grid-cols-2" onSubmit={addRoutingRule}>
             <Field label="Task">
               <select className={fieldClass} name="task">
-                {(["brief", "draft", "qa", "faq", "meta", "image_brief", "image_gen", "image_check"] as RoutingTask[]).map((task) => (
+                {(["brief", "draft", "qa", "faq", "meta", "autopilot_prompt", "image_brief", "image_gen", "image_check"] as RoutingTask[]).map((task) => (
                   <option key={task} value={task}>
                     {task}
                   </option>
@@ -2655,11 +3214,12 @@ function ContentTable({
 }) {
   return (
     <div className="overflow-x-auto">
-      <table className="w-full min-w-[760px] border-collapse text-left text-sm">
+      <table className="w-full min-w-[860px] border-collapse text-left text-sm">
         <thead className="border-b border-white/10 text-white/45">
           <tr>
             <th className="py-3 pr-4 font-medium">Title</th>
             <th className="py-3 pr-4 font-medium">Property</th>
+            <th className="py-3 pr-4 font-medium">Source</th>
             <th className="py-3 pr-4 font-medium">Status</th>
             <th className="py-3 pr-4 font-medium">Score</th>
             <th className="py-3 pr-4 font-medium">Date</th>
@@ -2679,6 +3239,11 @@ function ContentTable({
                 </button>
               </td>
               <td className="py-3 pr-4 text-white/60">{propertyLabel(item.property)}</td>
+              <td className="py-3 pr-4">
+                <Badge tone={item.source === "autopilot" ? "cyan" : "gray"}>
+                  {sourceLabel(item.source)}
+                </Badge>
+              </td>
               <td className="py-3 pr-4">
                 <StatusBadge status={item.status} />
               </td>
@@ -2970,6 +3535,11 @@ function Score({ value }: { value: number | null }) {
 const fieldClass =
   "w-full border border-white/10 bg-[#0d0f12] px-3 py-2.5 text-sm text-white outline-none transition placeholder:text-white/25 focus:border-emerald-300/45";
 
+function mergeById<T extends { id: string }>(saved: T[], seeded: T[]) {
+  const savedIds = new Set(saved.map((entry) => entry.id));
+  return [...saved, ...seeded.filter((entry) => !savedIds.has(entry.id))];
+}
+
 function normalizeState(saved: Partial<EngineState>): EngineState {
   const properties = (saved.properties?.length ? saved.properties : initialState.properties).map(
     (property) => ({ ...property, imagesEnabled: property.imagesEnabled ?? false }),
@@ -3005,8 +3575,28 @@ function normalizeState(saved: Partial<EngineState>): EngineState {
     brands,
     contextDocs: saved.contextDocs ?? initialState.contextDocs,
     metrics: saved.metrics ?? initialState.metrics,
-    models: saved.models ?? initialState.models,
-    routingRules: saved.routingRules ?? initialState.routingRules,
+    models: mergeById(saved.models ?? [], initialState.models),
+    routingRules: mergeById(
+      (saved.routingRules ?? []).filter(
+        (rule) =>
+          !["rule_update03_draft_openai", "rule_update03_qa_anthropic", "rule_update03_autopilot_prompt"].includes(rule.id),
+      ),
+      initialState.routingRules,
+    ),
+    autopilotSettings: properties.map((property) => {
+      const savedSetting = saved.autopilotSettings?.find(
+        (setting) => setting.property === property.slug,
+      );
+      return {
+        ...makeDefaultAutopilotSetting(property.slug),
+        ...savedSetting,
+        property: property.slug,
+        publishDays: savedSetting?.publishDays?.length
+          ? savedSetting.publishDays
+          : makeDefaultAutopilotSetting(property.slug).publishDays,
+      };
+    }),
+    autopilotWarnings: saved.autopilotWarnings ?? initialState.autopilotWarnings,
     gscConnected: saved.gscConnected ?? false,
     cron: saved.cron ?? initialState.cron,
     apiKeys: saved.apiKeys ?? initialState.apiKeys,
@@ -3038,15 +3628,218 @@ function getVisualProfileCompleteness(state: EngineState, property: PropertySlug
   return { complete: missing.length === 0, missing };
 }
 
+function makeDefaultAutopilotSetting(property: PropertySlug): AutopilotSetting {
+  return {
+    property,
+    enabled: false,
+    cadence: "weekly",
+    customCron: "",
+    piecesPerCycle: 1,
+    publishTime: "09:00",
+    publishDays: ["tue"],
+    contentType: "article",
+    maxQueued: 3,
+    backlogPriorityThreshold: 7,
+    nextRunAt: nextAutopilotRun({
+      property,
+      enabled: false,
+      cadence: "weekly",
+      customCron: "",
+      piecesPerCycle: 1,
+      publishTime: "09:00",
+      publishDays: ["tue"],
+      contentType: "article",
+      maxQueued: 3,
+      backlogPriorityThreshold: 7,
+    }),
+  };
+}
+
+function makeAutopilotPromptPlan(
+  state: EngineState,
+  property: PropertyConfig,
+  setting: AutopilotSetting,
+  backlogTopic: Topic | undefined,
+  index: number,
+  avoidTitle?: string,
+) {
+  const brand = state.brands.find((entry) => entry.property === property.slug);
+  const pillars = parseList(brand?.pillars ?? "");
+  const pillarCounts = pillars.map((pillar) => ({
+    pillar,
+    count: state.content.filter(
+      (item) =>
+        item.property === property.slug &&
+        item.status === "published" &&
+        item.toneOverride.toLowerCase().includes(pillar.toLowerCase()),
+    ).length,
+  }));
+  const suggestedPillar =
+    pillarCounts.sort((a, b) => a.count - b.count)[index % Math.max(1, pillarCounts.length)]
+      ?.pillar ?? pillars[index % Math.max(1, pillars.length)] ?? "brand strategy";
+  const recentTitles = state.content
+    .filter((item) => item.property === property.slug)
+    .slice(0, 30)
+    .map((item) => item.title);
+  const performers = topPerformanceTopics(state, property.slug);
+  const englishFrames = [
+    "becomes a repeatable operating habit",
+    "improves decision quality for small teams",
+    "turns scattered publishing into a system",
+    "creates founder leverage without hype",
+    "supports clearer content operations",
+  ];
+  const spanishFrames = [
+    "fortalece el criterio humano",
+    "convierte la publicacion en un sistema",
+    "ayuda a decidir con mas claridad",
+    "evita automatizar sin intencion",
+    "sostiene una practica editorial consciente",
+  ];
+  const title = backlogTopic
+    ? backlogTopic.title
+    : property.language === "Spanish"
+      ? `Como ${suggestedPillar} ${spanishFrames[index % spanishFrames.length]}`
+      : `How ${suggestedPillar} ${englishFrames[index % englishFrames.length]}`;
+  const adjustedTitle = avoidTitle ? `${title} from a new operator angle` : title;
+  const keywords = backlogTopic?.keywords.length
+    ? backlogTopic.keywords
+    : [suggestedPillar, property.language === "Spanish" ? "criterio humano" : "operating system"];
+  const angle = backlogTopic?.angle || (
+    property.language === "Spanish"
+      ? `Una pieza practica que rota hacia ${suggestedPillar} y evita repetir temas recientes.`
+      : `A practical article that rotates into ${suggestedPillar} without repeating recent coverage.`
+  );
+  const noveltyRationale = recentTitles.length
+    ? `Differs from recent coverage by focusing on ${suggestedPillar} through ${angle.toLowerCase()}`
+    : `Starts the cadence with ${suggestedPillar} as the first coverage lane.`;
+
+  return {
+    title: adjustedTitle,
+    angle,
+    keywords,
+    pillar: suggestedPillar,
+    noveltyRationale,
+    prompt: [
+      `Topic: ${adjustedTitle}`,
+      `Angle: ${angle}`,
+      `Primary keyword: ${keywords[0] ?? suggestedPillar}`,
+      `Secondary keywords: ${keywords.slice(1, 4).join(", ") || "none"}`,
+      `Suggested pillar: ${suggestedPillar}`,
+      performers ? `Performance signal: ${performers}` : "Performance signal: not enough data yet.",
+      avoidTitle ? `Avoid repeating: ${avoidTitle}` : "",
+      "Write the full piece through the existing SEO/AEO gates, with an answer-first opening, FAQ block, JSON-LD readiness, and brand alignment.",
+    ]
+      .filter(Boolean)
+      .join("\n"),
+  };
+}
+
+function findDuplicateCandidate(
+  state: EngineState,
+  property: PropertySlug,
+  title: string,
+  keywords: string[],
+) {
+  const proposed = `${title} ${keywords.join(" ")}`;
+  return state.content
+    .filter(
+      (item) =>
+        item.property === property &&
+        !["rejected", "failed"].includes(item.status),
+    )
+    .slice(0, 30)
+    .find((item) => textSimilarity(proposed, `${item.title} ${item.keywords.join(" ")}`) >= 0.85);
+}
+
+function textSimilarity(left: string, right: string) {
+  const leftTokens = new Set(tokenizeForSimilarity(left));
+  const rightTokens = new Set(tokenizeForSimilarity(right));
+  if (!leftTokens.size || !rightTokens.size) return 0;
+  const intersection = [...leftTokens].filter((token) => rightTokens.has(token)).length;
+  return (2 * intersection) / (leftTokens.size + rightTokens.size);
+}
+
+function tokenizeForSimilarity(value: string) {
+  return value
+    .toLowerCase()
+    .replace(/[^a-z0-9áéíóúñü\s-]/gi, " ")
+    .split(/\s+/)
+    .filter((token) => token.length > 3);
+}
+
+function makeAutopilotPublishAt(setting: AutopilotSetting, index: number) {
+  const day = setting.publishDays[index % Math.max(1, setting.publishDays.length)] ?? "tue";
+  const date = nextDateForDay(day, Math.floor(index / Math.max(1, setting.publishDays.length)));
+  const [hours, minutes] = (setting.publishTime || "09:00").split(":").map(Number);
+  date.setHours(hours || 9, minutes || 0, 0, 0);
+  return toDatetimeLocalValue(date);
+}
+
+function nextAutopilotRun(setting: AutopilotSetting) {
+  if (!setting.enabled) return setting.nextRunAt ?? "";
+  return makeAutopilotPublishAt(setting, 0);
+}
+
+function nextDateForDay(day: string, weekOffset = 0) {
+  const dayIndex = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"].indexOf(day);
+  const target = dayIndex >= 0 ? dayIndex : 2;
+  const date = new Date();
+  const delta = (target - date.getDay() + 7) % 7 || 7;
+  date.setDate(date.getDate() + delta + weekOffset * 7);
+  return date;
+}
+
+function toDatetimeLocalValue(date: Date) {
+  const pad = (value: number) => value.toString().padStart(2, "0");
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}
+
+function autopilotSummary(setting: AutopilotSetting) {
+  const unit =
+    setting.cadence === "daily"
+      ? "every day"
+      : setting.cadence === "weekly"
+        ? "every week"
+        : setting.cadence === "biweekly"
+          ? "every two weeks"
+          : setting.cadence === "monthly"
+            ? "every month"
+            : `on ${setting.customCron || "a custom cron"}`;
+  const days = setting.publishDays
+    .map((value) => weekDays.find((day) => day.value === value)?.label ?? value)
+    .join("/");
+  return `${setting.piecesPerCycle} ${setting.contentType.replace("_", " ")}${setting.piecesPerCycle === 1 ? "" : "s"} ${unit}, publishing ${days || "next open day"} at ${setting.publishTime || "09:00"}.`;
+}
+
+function topPerformanceTopics(state: EngineState, property: PropertySlug) {
+  const propertyContent = state.content.filter((item) => item.property === property);
+  const rows = propertyContent
+    .map((item) => ({
+      title: item.title,
+      pageviews: state.metrics
+        .filter((metric) => metric.contentItemId === item.id)
+        .reduce((sum, metric) => sum + metric.pageviews, 0),
+    }))
+    .filter((row) => row.pageviews > 0)
+    .sort((a, b) => b.pageviews - a.pageviews);
+  if (!rows.length) return "";
+  return `lean toward themes like "${rows[0].title}" (${rows[0].pageviews} pageviews).`;
+}
+
 function collectServedModels(
   state: EngineState,
   item: ContentItem,
   language: PropertyConfig["language"],
   includeImage: boolean,
 ): ModelCallLog[] {
-  const tasks: RoutingTask[] = includeImage
-    ? ["brief", "draft", "qa", "image_brief", "image_gen", "image_check"]
-    : ["brief", "draft", "qa"];
+  const tasks: RoutingTask[] = [
+    ...(item.source === "autopilot" ? (["autopilot_prompt"] as RoutingTask[]) : []),
+    "brief",
+    "draft",
+    "qa",
+    ...(includeImage ? (["image_brief", "image_gen", "image_check"] as RoutingTask[]) : []),
+  ];
   return tasks.map((task) =>
     resolveServedModel(state, {
       task,
@@ -3151,7 +3944,7 @@ function buildHeroImagePatch(
 }
 
 function providerConfigured(provider: ModelProvider) {
-  return provider === "anthropic";
+  return provider === "anthropic" || provider === "openai";
 }
 
 function makeRecommendedQaRule(models: ModelRegistryEntry[]): RoutingRule {
@@ -3586,7 +4379,7 @@ function propertyLabel(property: PropertySlug) {
 }
 
 function sourceLabel(source: ContentSource) {
-  return source.replace("_", " ");
+  return source.replaceAll("_", " ");
 }
 
 function statusLabel(status: ContentStatus) {

@@ -133,11 +133,21 @@ Seed data: `supabase/seed.sql` inserts `herzenco` and `humanismo-evolutivo` prop
 
 ## External Resources
 
-- GitHub remote: `git@github.com:herzenco/HerzenCo-ContentGenerator.git`
+- GitHub remote: `https://github.com/herzenco/HerzenCo-ContentGenerator.git`
 - Build spec: Codex attachment `cab27965-82b7-4a00-9e91-d9265ceacb87/pasted-text.txt`
 - Launch sites: `https://herzenco.co`, `https://humanismoevolutivo.com`
 
 ## Session Log
+
+### Session #8 - 2026-07-17
+
+Agent: Codex
+
+Branch/Commit: `main`, no commit yet
+
+Summary: Implemented Update 03 locally with the routing flip, Autopilot settings per property, manual cycle execution, backlog consumption, publish spread, duplicate skip warnings, source badging, and the Update 03 Supabase migration. Verified with `npm run build`.
+
+Files changed: `src/components/content-engine-app.tsx`, `supabase/migrations/20260717120000_update_03_autopilot_routing.sql`, project memory.
 
 ### Session #6 - 2026-07-16
 
