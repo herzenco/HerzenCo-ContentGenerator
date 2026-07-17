@@ -29,16 +29,10 @@ import {
 } from "lucide-react";
 import { FormEvent, ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { createClient } from "@/utils/supabase/client";
+import { humanizeCode, humanizeEval, primaryReviewReason } from "@/lib/humanize";
 
-type View =
-  | "quick"
-  | "overview"
-  | "properties"
-  | "review"
-  | "performance"
-  | "calendar"
-  | "topics"
-  | "settings";
+type View = "home" | "content" | "properties" | "settings";
+type ContentMode = "list" | "calendar" | "ideas";
 
 type PropertySlug = string;
 type ContentStatus =
@@ -271,14 +265,9 @@ const navItems: {
   label: string;
   icon: ReactNode;
 }[] = [
-  { view: "quick", label: "Quick Generate", icon: <Zap size={17} /> },
-  { view: "overview", label: "Overview", icon: <Gauge size={17} /> },
+  { view: "home", label: "Home", icon: <Gauge size={17} /> },
+  { view: "content", label: "Content", icon: <FileText size={17} /> },
   { view: "properties", label: "Properties", icon: <Globe2 size={17} /> },
-  { view: "review", label: "Review Queue", icon: <ShieldCheck size={17} /> },
-  { view: "performance", label: "Performance", icon: <BarChart3 size={17} /> },
-  { view: "calendar", label: "Calendar", icon: <CalendarDays size={17} /> },
-  { view: "topics", label: "Topics", icon: <ListChecks size={17} /> },
-  { view: "settings", label: "Settings", icon: <Settings size={17} /> },
 ];
 
 const initialState: EngineState = {
@@ -624,7 +613,13 @@ interface ContentEngineAppProps {
 
 export function ContentEngineApp({ userEmail }: ContentEngineAppProps) {
   const [state, setState] = useState<EngineState>(initialState);
-  const [activeView, setActiveView] = useState<View>("quick");
+  const [activeView, setActiveView] = useState<View>("home");
+  const [contentMode, setContentMode] = useState<ContentMode>("list");
+  const [homeOptionsOpen, setHomeOptionsOpen] = useState(
+    () =>
+      typeof window !== "undefined" &&
+      window.localStorage.getItem("herzen-home-options-open") === "true",
+  );
   const [form, setForm] = useState<QuickGenerateForm>(emptyForm);
   const [selectedContentId, setSelectedContentId] = useState<string>(
     initialState.content[0]?.id ?? "",
@@ -632,10 +627,7 @@ export function ContentEngineApp({ userEmail }: ContentEngineAppProps) {
   const [selectedPropertySlug, setSelectedPropertySlug] =
     useState<PropertySlug>("herzenco");
   const [propertyTab, setPropertyTab] =
-    useState<"profile" | "content" | "settings">("profile");
-  const [performanceProperty, setPerformanceProperty] = useState<PropertySlug | "all">(
-    "all",
-  );
+    useState<"profile" | "content" | "performance" | "settings">("profile");
   const [performanceDays, setPerformanceDays] = useState<7 | 30 | 90>(30);
   const [query, setQuery] = useState("");
   const [toast, setToast] = useState("Local workspace ready");
@@ -654,6 +646,10 @@ export function ContentEngineApp({ userEmail }: ContentEngineAppProps) {
 
     return () => window.clearTimeout(restoreTimer);
   }, []);
+
+  useEffect(() => {
+    window.localStorage.setItem("herzen-home-options-open", String(homeOptionsOpen));
+  }, [homeOptionsOpen]);
 
   useEffect(() => {
     if (!storageReady.current) {
@@ -678,6 +674,8 @@ export function ContentEngineApp({ userEmail }: ContentEngineAppProps) {
         .includes(normalized),
     );
   }, [query, state.content]);
+
+  const reviewCount = state.content.filter((item) => item.status === "needs_review").length;
 
   const selectedPropertyCompleteness = useMemo(
     () => getProfileCompleteness(state, form.property),
@@ -756,7 +754,7 @@ export function ContentEngineApp({ userEmail }: ContentEngineAppProps) {
       return;
     }
     if (!selectedPropertyCompleteness.complete) {
-      setToast(`brand_profile_incomplete: ${selectedPropertyCompleteness.missing.join(", ")}`);
+      setToast(humanizeCode("brand_profile_incomplete"));
       setActiveView("properties");
       setSelectedPropertySlug(form.property);
       setPropertyTab("profile");
@@ -900,7 +898,7 @@ export function ContentEngineApp({ userEmail }: ContentEngineAppProps) {
       title: topic.title,
       keywords: topic.keywords.join(", "),
     });
-    setActiveView("quick");
+    setActiveView("home");
     setState((current) => ({
       ...current,
       topics: current.topics.map((entry) =>
@@ -1159,12 +1157,30 @@ export function ContentEngineApp({ userEmail }: ContentEngineAppProps) {
                 type="button"
               >
                 {item.icon}
-                {item.label}
+                <span className="flex-1">{item.label}</span>
+                {item.view === "home" && reviewCount > 0 && (
+                  <Badge tone="amber">{reviewCount}</Badge>
+                )}
               </button>
             ))}
           </nav>
 
-          <div className="mt-8 border border-white/10 bg-white/[0.03] p-3">
+          <div className="mt-8 border-t border-white/10 pt-4">
+            <button
+              className={`flex w-full items-center gap-3 border px-3 py-2.5 text-left text-sm transition ${
+                activeView === "settings"
+                  ? "border-emerald-300/35 bg-emerald-300/10 text-emerald-100"
+                  : "border-transparent text-white/55 hover:border-white/10 hover:bg-white/[0.04] hover:text-white"
+              }`}
+              onClick={() => setActiveView("settings")}
+              type="button"
+            >
+              <Settings size={17} />
+              Settings
+            </button>
+          </div>
+
+          <div className="mt-4 border border-white/10 bg-white/[0.03] p-3">
             <div className="flex items-center gap-2 text-sm text-white/70">
               <Activity size={16} />
               {toast}
@@ -1198,7 +1214,7 @@ export function ContentEngineApp({ userEmail }: ContentEngineAppProps) {
               </label>
               <button
                 className="inline-flex items-center gap-2 border border-emerald-300/35 bg-emerald-300/10 px-3 py-2 text-sm text-emerald-100 hover:bg-emerald-300/15"
-                onClick={() => setActiveView("quick")}
+                onClick={() => setActiveView("home")}
                 type="button"
               >
                 <Zap size={16} />
@@ -1216,34 +1232,59 @@ export function ContentEngineApp({ userEmail }: ContentEngineAppProps) {
           </header>
 
           <div className="p-5">
-            {activeView === "quick" && (
-              <QuickGenerateView
+            {activeView === "home" && (
+              <HomeView
+                autopilotWarnings={state.autopilotWarnings}
                 content={state.content}
                 form={form}
+                gscConnected={state.gscConnected}
+                homeOptionsOpen={homeOptionsOpen}
+                metrics={state.metrics}
                 onChange={setForm}
+                onOpenCalendar={() => {
+                  setActiveView("content");
+                  setContentMode("calendar");
+                }}
                 onSubmit={createContentFromForm}
-                properties={state.properties}
-                profileCompleteness={selectedPropertyCompleteness}
+                onToggleOptions={() => setHomeOptionsOpen((value) => !value)}
+                onApprove={approveContent}
+                onOpenContent={(id) => {
+                  setSelectedContentId(id);
+                  setActiveView("content");
+                  setContentMode("list");
+                }}
                 onOpenProfile={() => {
                   setActiveView("properties");
                   setSelectedPropertySlug(form.property);
                   setPropertyTab("profile");
                 }}
+                onOpenPropertyPerformance={(property) => {
+                  setActiveView("properties");
+                  setSelectedPropertySlug(property);
+                  setPropertyTab("performance");
+                }}
+                onRegenerate={regenerateContent}
+                properties={state.properties}
+                profileCompleteness={selectedPropertyCompleteness}
                 selectedContent={selectedContent}
               />
             )}
-            {activeView === "overview" && (
-              <OverviewView
-                autopilotSettings={state.autopilotSettings}
-                autopilotWarnings={state.autopilotWarnings}
+            {activeView === "content" && (
+              <ContentView
                 content={filteredContent}
+                contentMode={contentMode}
+                onAddTopic={addTopic}
+                onApprove={approveContent}
+                onDraft={draftFromTopic}
+                onRegenerate={regenerateContent}
+                onRegenerateImage={regenerateHeroImage}
+                onModeChange={setContentMode}
                 onPublish={publishNow}
-                onRunAutopilot={runAutopilotCycle}
-                onSelect={(id) => {
-                  setSelectedContentId(id);
-                  setActiveView("review");
-                }}
+                onReject={rejectContent}
+                onSelect={(id) => setSelectedContentId(id)}
                 properties={state.properties}
+                selectedContentId={selectedContentId}
+                topics={state.topics}
               />
             )}
             {activeView === "properties" && (
@@ -1252,28 +1293,19 @@ export function ContentEngineApp({ userEmail }: ContentEngineAppProps) {
                 autopilotSettings={state.autopilotSettings}
                 content={filteredContent}
                 contextDocs={state.contextDocs}
-                onAddProperty={(property) =>
+                onAddProperty={(property, brand, contextDoc, autopilotPatch) =>
                   setState((current) => ({
                     ...current,
                     properties: [property, ...current.properties],
-                    brands: [
-                      {
-                        property: property.slug,
-                        voice: "",
-                        audience: "",
-                        pillars: "",
-                        banned: "",
-                        cta: "",
-                        styleExamples: [],
-                        defaultCtas: [],
-                        visualStyleDescription: "",
-                        visualPalette: "",
-                        visualRules: "",
-                      },
-                      ...current.brands,
-                    ],
+                    brands: [brand, ...current.brands],
+                    contextDocs: contextDoc
+                      ? [contextDoc, ...current.contextDocs]
+                      : current.contextDocs,
                     autopilotSettings: [
-                      makeDefaultAutopilotSetting(property.slug),
+                      {
+                        ...makeDefaultAutopilotSetting(property.slug),
+                        ...autopilotPatch,
+                      },
                       ...current.autopilotSettings,
                     ],
                   }))
@@ -1290,7 +1322,8 @@ export function ContentEngineApp({ userEmail }: ContentEngineAppProps) {
                 onRunAutopilot={runAutopilotCycle}
                 onSelectContent={(id) => {
                   setSelectedContentId(id);
-                  setActiveView("review");
+                  setActiveView("content");
+                  setContentMode("list");
                 }}
                 onUpdateAutopilotSetting={updateAutopilotSetting}
                 onUpdateBrand={updateBrand}
@@ -1316,48 +1349,19 @@ export function ContentEngineApp({ userEmail }: ContentEngineAppProps) {
                     ),
                   }))
                 }
+                gscConnected={state.gscConnected}
+                metrics={state.metrics}
+                onPerformanceDaysChange={setPerformanceDays}
+                performanceDays={performanceDays}
                 propertyTab={propertyTab}
                 properties={state.properties}
                 selectedPropertySlug={selectedPropertySlug}
               />
             )}
-            {activeView === "review" && (
-              <ReviewView
-                content={filteredContent}
-                onApprove={approveContent}
-                onRegenerateImage={regenerateHeroImage}
-                onRegenerate={regenerateContent}
-                onReject={rejectContent}
-                onSelect={setSelectedContentId}
-                selectedContentId={selectedContentId}
-              />
-            )}
-            {activeView === "performance" && (
-              <PerformanceView
-                content={filteredContent}
-                days={performanceDays}
-                gscConnected={state.gscConnected}
-                metrics={state.metrics}
-                onDaysChange={setPerformanceDays}
-                onPropertyChange={setPerformanceProperty}
-                properties={state.properties}
-                selectedProperty={performanceProperty}
-              />
-            )}
-            {activeView === "calendar" && (
-              <CalendarView content={filteredContent} onPublish={publishNow} />
-            )}
-            {activeView === "topics" && (
-              <TopicsView
-                onAddTopic={addTopic}
-                onDraft={draftFromTopic}
-                properties={state.properties}
-                topics={state.topics}
-              />
-            )}
             {activeView === "settings" && (
               <SettingsView
                 apiKeys={state.apiKeys}
+                autopilotSettings={state.autopilotSettings}
                 cron={state.cron}
                 gscConnected={state.gscConnected}
                 models={state.models}
@@ -1373,6 +1377,7 @@ export function ContentEngineApp({ userEmail }: ContentEngineAppProps) {
                   setState((current) => ({ ...current, routingRules }))
                 }
                 onThresholdChange={updateThreshold}
+                onUpdateAutopilotSetting={updateAutopilotSetting}
                 properties={state.properties}
                 routingRules={state.routingRules}
               />
@@ -1381,6 +1386,419 @@ export function ContentEngineApp({ userEmail }: ContentEngineAppProps) {
         </section>
       </div>
     </main>
+  );
+}
+
+function HomeView({
+  autopilotWarnings,
+  content,
+  form,
+  gscConnected,
+  homeOptionsOpen,
+  metrics,
+  onApprove,
+  onChange,
+  onOpenCalendar,
+  onOpenContent,
+  onOpenProfile,
+  onOpenPropertyPerformance,
+  onRegenerate,
+  onSubmit,
+  onToggleOptions,
+  properties,
+  profileCompleteness,
+  selectedContent,
+}: {
+  autopilotWarnings: AutopilotWarning[];
+  content: ContentItem[];
+  form: QuickGenerateForm;
+  gscConnected: boolean;
+  homeOptionsOpen: boolean;
+  metrics: ContentMetricDaily[];
+  onApprove: (id: string) => void;
+  onChange: (form: QuickGenerateForm) => void;
+  onOpenCalendar: () => void;
+  onOpenContent: (id: string) => void;
+  onOpenProfile: () => void;
+  onOpenPropertyPerformance: (property: PropertySlug) => void;
+  onRegenerate: (id: string) => void;
+  onSubmit: (event: FormEvent<HTMLFormElement>) => void;
+  onToggleOptions: () => void;
+  properties: PropertyConfig[];
+  profileCompleteness: { complete: boolean; missing: string[] };
+  selectedContent?: ContentItem;
+}) {
+  const selectedProperty = properties.find((property) => property.slug === form.property);
+  const needsReview = content.filter((item) => item.status === "needs_review");
+  const comingUp = content
+    .filter((item) => item.status === "scheduled")
+    .sort((a, b) => calendarTime(a) - calendarTime(b))
+    .slice(0, 7);
+
+  return (
+    <div className="space-y-5">
+      <Panel title="Generate">
+        <form className="space-y-4" onSubmit={onSubmit}>
+          <div className="flex flex-wrap gap-2">
+            {properties.map((property) => (
+              <button
+                className={`border px-3 py-2 text-sm ${
+                  form.property === property.slug
+                    ? "border-emerald-300/35 bg-emerald-300/10 text-emerald-100"
+                    : "border-white/10 text-white/60 hover:bg-white/[0.04]"
+                }`}
+                key={property.slug}
+                onClick={() =>
+                  onChange({
+                    ...form,
+                    property: property.slug,
+                    generateHeroImage: Boolean(property.imagesEnabled),
+                  })
+                }
+                type="button"
+              >
+                {property.domain}
+              </button>
+            ))}
+          </div>
+
+          <textarea
+            className={`${fieldClass} min-h-28 resize-y text-base`}
+            onChange={(event) => onChange({ ...form, prompt: event.target.value })}
+            placeholder="What should the Engine make today?"
+            value={form.prompt}
+          />
+
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <button
+              className="text-sm text-white/60 underline underline-offset-4 hover:text-white"
+              onClick={onToggleOptions}
+              type="button"
+            >
+              {homeOptionsOpen ? "Hide options" : "Options"}
+            </button>
+            <button
+              className="inline-flex items-center justify-center gap-2 border border-emerald-300/40 bg-emerald-300 px-4 py-2.5 text-sm font-semibold text-[#08100d] hover:bg-emerald-200 disabled:cursor-not-allowed disabled:border-white/10 disabled:bg-white/10 disabled:text-white/35"
+              disabled={!profileCompleteness.complete}
+              type="submit"
+            >
+              <Send size={17} />
+              Generate
+            </button>
+          </div>
+
+          {!profileCompleteness.complete && (
+            <div className="border border-amber-300/25 bg-amber-300/10 p-3 text-sm text-amber-100">
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                <p>{humanizeCode("brand_profile_incomplete")}</p>
+                <button
+                  className="text-left font-medium underline underline-offset-4"
+                  onClick={onOpenProfile}
+                  type="button"
+                >
+                  Complete profile
+                </button>
+              </div>
+            </div>
+          )}
+
+          {homeOptionsOpen && (
+            <div className="grid gap-4 border-t border-white/10 pt-4 md:grid-cols-2">
+              <Field label="Content type">
+                <select
+                  className={fieldClass}
+                  onChange={(event) =>
+                    onChange({
+                      ...form,
+                      contentType: event.target.value as QuickGenerateForm["contentType"],
+                    })
+                  }
+                  value={form.contentType}
+                >
+                  <option value="article">Article</option>
+                  <option value="newsletter">Newsletter</option>
+                  <option value="social_post">Social post</option>
+                </select>
+              </Field>
+              <Field label="Publish date">
+                <input
+                  className={fieldClass}
+                  onChange={(event) => onChange({ ...form, publishAt: event.target.value })}
+                  type="datetime-local"
+                  value={form.publishAt}
+                />
+              </Field>
+              <Field label="Title">
+                <input
+                  className={fieldClass}
+                  onChange={(event) => onChange({ ...form, title: event.target.value })}
+                  value={form.title}
+                />
+              </Field>
+              <Field label="Keywords">
+                <input
+                  className={fieldClass}
+                  onChange={(event) => onChange({ ...form, keywords: event.target.value })}
+                  value={form.keywords}
+                />
+              </Field>
+              <Field label="Tone">
+                <input
+                  className={fieldClass}
+                  onChange={(event) => onChange({ ...form, toneOverride: event.target.value })}
+                  value={form.toneOverride}
+                />
+              </Field>
+              <div className="flex flex-wrap items-end gap-4">
+                {selectedProperty?.imagesEnabled && (
+                  <label className="flex items-center gap-2 text-sm text-white/70">
+                    <input
+                      checked={form.generateHeroImage}
+                      className="h-4 w-4 accent-cyan-300"
+                      onChange={(event) =>
+                        onChange({ ...form, generateHeroImage: event.target.checked })
+                      }
+                      type="checkbox"
+                    />
+                    Generate hero image
+                  </label>
+                )}
+                <label className="flex items-center gap-2 text-sm text-white/70">
+                  <input
+                    checked={form.skipAutoPublish}
+                    className="h-4 w-4 accent-emerald-300"
+                    onChange={(event) =>
+                      onChange({ ...form, skipAutoPublish: event.target.checked })
+                    }
+                    type="checkbox"
+                  />
+                  Force review
+                </label>
+              </div>
+            </div>
+          )}
+        </form>
+
+        {selectedContent && (
+          <div className="mt-4 border border-white/10 bg-[#0d0f12] p-3">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <p className="font-medium">{selectedContent.title}</p>
+                <p className="mt-1 text-sm text-white/50">
+                  Current status: {statusLabel(selectedContent.status)}
+                </p>
+              </div>
+              <StatusBadge status={selectedContent.status} />
+            </div>
+          </div>
+        )}
+      </Panel>
+
+      <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_360px]">
+        <Panel title="Needs you">
+          <div className="space-y-3">
+            {needsReview.map((item) => (
+              <div className="border border-amber-300/25 bg-amber-300/10 p-3" key={item.id}>
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <p className="font-medium text-amber-50">{item.title}</p>
+                    <p className="mt-1 text-sm text-amber-100/75">
+                      {propertyLabel(item.property)}
+                    </p>
+                  </div>
+                  <Score value={item.qualityScore} />
+                </div>
+                <p className="mt-3 text-sm text-amber-100/85">
+                  {primaryReviewReason(item.evals)}
+                </p>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <ActionButton icon={<Check size={16} />} label="Approve" onClick={() => onApprove(item.id)} tone="green" />
+                  <ActionButton icon={<RefreshCw size={16} />} label="Regenerate" onClick={() => onRegenerate(item.id)} tone="cyan" />
+                  <ActionButton icon={<FileText size={16} />} label="Open" onClick={() => onOpenContent(item.id)} tone="cyan" />
+                </div>
+              </div>
+            ))}
+            {autopilotWarnings.map((warning) => (
+              <div className="border border-amber-300/25 bg-amber-300/10 p-3" key={warning.id}>
+                <p className="font-medium text-amber-50">
+                  {humanizeCode(warning.code)}
+                </p>
+                <details className="mt-2 text-xs text-amber-100/65">
+                  <summary>Details</summary>
+                  <p className="mt-1 font-mono">{warning.code}</p>
+                  <p className="mt-1">{warning.detail}</p>
+                </details>
+              </div>
+            ))}
+            {needsReview.length === 0 && autopilotWarnings.length === 0 && (
+              <EmptyState icon={<Check size={20} />} label="Nothing needs you." />
+            )}
+          </div>
+        </Panel>
+
+        <div className="space-y-5">
+          <Panel title="Coming up">
+            <div className="space-y-3">
+              {comingUp.map((item) => (
+                <button
+                  className="w-full border border-white/10 bg-white/[0.025] p-3 text-left hover:bg-white/[0.045]"
+                  key={item.id}
+                  onClick={() => onOpenContent(item.id)}
+                  type="button"
+                >
+                  <div className="flex items-center gap-2 text-xs text-white/45">
+                    <span>{formatDateTime(item.publishAt)}</span>
+                    <span>{propertyLabel(item.property)}</span>
+                    {item.source === "autopilot" && <Zap size={13} className="text-cyan-200" />}
+                  </div>
+                  <p className="mt-2 line-clamp-2 text-sm font-medium">{item.title}</p>
+                </button>
+              ))}
+              {comingUp.length === 0 && (
+                <EmptyState icon={<CalendarDays size={20} />} label="Nothing scheduled" />
+              )}
+              <button
+                className="text-sm text-cyan-100 underline underline-offset-4"
+                onClick={onOpenCalendar}
+                type="button"
+              >
+                Full calendar
+              </button>
+            </div>
+          </Panel>
+
+          <Panel title="Pulse">
+            <div className="space-y-3">
+              {properties.map((property) => (
+                <button
+                  className="w-full border border-white/10 bg-white/[0.025] p-3 text-left hover:bg-white/[0.045]"
+                  key={property.slug}
+                  onClick={() => onOpenPropertyPerformance(property.slug)}
+                  type="button"
+                >
+                  <div className="flex items-center justify-between gap-3">
+                    <p className="font-medium">{property.domain}</p>
+                    <p className="font-mono text-sm text-emerald-200">
+                      {pageviewsForProperty(content, metrics, property.slug, 7)}
+                    </p>
+                  </div>
+                  <Sparkline values={sparklineForProperty(content, metrics, property.slug, 7)} />
+                </button>
+              ))}
+              {!gscConnected && <Badge tone="amber">Pageviews only</Badge>}
+            </div>
+          </Panel>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ContentView({
+  content,
+  contentMode,
+  onAddTopic,
+  onApprove,
+  onDraft,
+  onRegenerate,
+  onRegenerateImage,
+  onModeChange,
+  onPublish,
+  onReject,
+  onSelect,
+  properties,
+  selectedContentId,
+  topics,
+}: {
+  content: ContentItem[];
+  contentMode: ContentMode;
+  onAddTopic: (event: FormEvent<HTMLFormElement>) => void;
+  onApprove: (id: string) => void;
+  onDraft: (topic: Topic) => void;
+  onRegenerate: (id: string) => void;
+  onRegenerateImage: (id: string) => void;
+  onModeChange: (mode: ContentMode) => void;
+  onPublish: (id: string) => void;
+  onReject: (id: string) => void;
+  onSelect: (id: string) => void;
+  properties: PropertyConfig[];
+  selectedContentId: string;
+  topics: Topic[];
+}) {
+  const [propertyFilter, setPropertyFilter] = useState<PropertySlug | "all">("all");
+  const [statusFilter, setStatusFilter] = useState<ContentStatus | "all">("all");
+  const [sourceFilter, setSourceFilter] = useState<ContentSource | "all">("all");
+  const filtered = content.filter(
+    (item) =>
+      (propertyFilter === "all" || item.property === propertyFilter) &&
+      (statusFilter === "all" || item.status === statusFilter) &&
+      (sourceFilter === "all" || item.source === sourceFilter),
+  );
+
+  return (
+    <div className="space-y-5">
+      <div className="flex flex-wrap gap-2">
+        {(["list", "calendar", "ideas"] as ContentMode[]).map((mode) => (
+          <button
+            className={`border px-3 py-2 text-sm ${
+              contentMode === mode
+                ? "border-emerald-300/35 bg-emerald-300/10 text-emerald-100"
+                : "border-white/10 text-white/60 hover:bg-white/[0.04]"
+            }`}
+            key={mode}
+            onClick={() => onModeChange(mode)}
+            type="button"
+          >
+            {mode === "ideas" ? "Ideas" : mode[0].toUpperCase() + mode.slice(1)}
+          </button>
+        ))}
+      </div>
+
+      {contentMode === "list" && (
+        <div className="space-y-5">
+          <Panel title="Content list">
+            <div className="mb-4 flex flex-wrap gap-2">
+              <select className={fieldClass} onChange={(event) => setPropertyFilter(event.target.value as PropertySlug | "all")} value={propertyFilter}>
+                <option value="all">All properties</option>
+                {properties.map((property) => (
+                  <option key={property.slug} value={property.slug}>{property.domain}</option>
+                ))}
+              </select>
+              <select className={fieldClass} onChange={(event) => setStatusFilter(event.target.value as ContentStatus | "all")} value={statusFilter}>
+                <option value="all">All statuses</option>
+                {(["drafting", "qa", "needs_review", "scheduled", "published", "rejected", "failed"] as ContentStatus[]).map((status) => (
+                  <option key={status} value={status}>{statusLabel(status)}</option>
+                ))}
+              </select>
+              <select className={fieldClass} onChange={(event) => setSourceFilter(event.target.value as ContentSource | "all")} value={sourceFilter}>
+                <option value="all">All sources</option>
+                {(["quick_generate", "autopilot", "api", "schedule", "repurpose"] as ContentSource[]).map((source) => (
+                  <option key={source} value={source}>{sourceLabel(source)}</option>
+                ))}
+              </select>
+            </div>
+            <ContentTable content={filtered} onPublish={onPublish} onSelect={onSelect} />
+          </Panel>
+          <ReviewView
+            content={content}
+            onApprove={onApprove}
+            onRegenerate={onRegenerate}
+            onRegenerateImage={onRegenerateImage}
+            onReject={onReject}
+            onSelect={onSelect}
+            selectedContentId={selectedContentId}
+          />
+        </div>
+      )}
+
+      {contentMode === "calendar" && (
+        <CalendarView content={content} onPublish={onPublish} />
+      )}
+
+      {contentMode === "ideas" && (
+        <TopicsView onAddTopic={onAddTopic} onDraft={onDraft} properties={properties} topics={topics} />
+      )}
+    </div>
   );
 }
 
@@ -1512,10 +1930,7 @@ function QuickGenerateView({
           {!profileCompleteness.complete && (
             <div className="border border-amber-300/25 bg-amber-300/10 p-3 text-sm text-amber-100">
               <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                <p>
-                  brand_profile_incomplete:{" "}
-                  {profileCompleteness.missing.join(", ")}
-                </p>
+                <p>{humanizeCode("brand_profile_incomplete")}</p>
                 <button
                   className="text-left font-medium underline underline-offset-4"
                   onClick={onOpenProfile}
@@ -1790,7 +2205,10 @@ function ReviewView({
                     className="grid gap-3 border border-white/10 bg-white/[0.025] p-3 md:grid-cols-[180px_80px_1fr]"
                     key={evalResult.name}
                   >
-                    <p className="font-medium">{evalResult.name}</p>
+                    <div>
+                      <p className="font-medium">{humanizeEval(evalResult.name, evalResult.detail)}</p>
+                      <p className="mt-1 font-mono text-xs text-white/35">{evalResult.name}</p>
+                    </div>
                     <Score value={evalResult.score} />
                     <p className="text-sm text-white/60">{evalResult.detail}</p>
                   </div>
@@ -1805,6 +2223,9 @@ function ReviewView({
     </div>
   );
 }
+
+void QuickGenerateView;
+void OverviewView;
 
 function CalendarView({
   content,
@@ -1882,8 +2303,11 @@ function TopicsView({
 }) {
   return (
     <div className="grid gap-5 xl:grid-cols-[380px_minmax(0,1fr)]">
-      <Panel title="Add Topic">
+      <Panel title="Drop an idea">
         <form className="space-y-4" onSubmit={onAddTopic}>
+          <p className="text-sm text-white/55">
+            Add a ranked idea here. Autopilot will use high-priority ideas before inventing new ones.
+          </p>
           <Field label="Property">
             <select className={fieldClass} name="property">
               {properties.map((property) => (
@@ -1921,7 +2345,7 @@ function TopicsView({
           </button>
         </form>
       </Panel>
-      <Panel title="Backlog">
+      <Panel title="Ideas">
         <div className="space-y-3">
           {topics.map((topic) => (
             <div className="border border-white/10 bg-white/[0.025] p-4" key={topic.id}>
@@ -1956,6 +2380,8 @@ function PropertiesView({
   brands,
   content,
   contextDocs,
+  gscConnected,
+  metrics,
   onAddProperty,
   onDeleteDoc,
   onSelectProperty,
@@ -1968,6 +2394,8 @@ function PropertiesView({
   onUpdateDoc,
   onUpdateProperty,
   onUpsertDoc,
+  onPerformanceDaysChange,
+  performanceDays,
   properties,
   propertyTab,
   selectedPropertySlug,
@@ -1976,23 +2404,46 @@ function PropertiesView({
   brands: BrandProfile[];
   content: ContentItem[];
   contextDocs: BrandContextDoc[];
-  onAddProperty: (property: PropertyConfig) => void;
+  gscConnected: boolean;
+  metrics: ContentMetricDaily[];
+  onAddProperty: (
+    property: PropertyConfig,
+    brand: BrandProfile,
+    contextDoc?: BrandContextDoc,
+    autopilotPatch?: Partial<AutopilotSetting>,
+  ) => void;
   onDeleteDoc: (id: string) => void;
   onPublish: (id: string) => void;
   onRunAutopilot: (property: PropertySlug) => void;
   onSelectProperty: (slug: PropertySlug) => void;
   onSelectContent: (id: string) => void;
-  onSetTab: (tab: "profile" | "content" | "settings") => void;
+  onSetTab: (tab: "profile" | "content" | "performance" | "settings") => void;
   onUpdateAutopilotSetting: (property: PropertySlug, patch: Partial<AutopilotSetting>) => void;
   onUpdateBrand: (property: PropertySlug, patch: Partial<BrandProfile>) => void;
   onUpdateDoc: (doc: BrandContextDoc) => void;
   onUpdateProperty: (slug: PropertySlug, patch: Partial<PropertyConfig>) => void;
   onUpsertDoc: (doc: BrandContextDoc) => void;
+  onPerformanceDaysChange: (days: 7 | 30 | 90) => void;
+  performanceDays: 7 | 30 | 90;
   properties: PropertyConfig[];
-  propertyTab: "profile" | "content" | "settings";
+  propertyTab: "profile" | "content" | "performance" | "settings";
   selectedPropertySlug: PropertySlug;
 }) {
   const [showAddProperty, setShowAddProperty] = useState(false);
+  const [wizardStep, setWizardStep] = useState(1);
+  const [wizard, setWizard] = useState({
+    name: "",
+    baseUrl: "",
+    language: "English" as PropertyConfig["language"],
+    voice: "",
+    audience: "",
+    pillars: "",
+    contextTitle: "Brand context",
+    contextMd: "",
+    threshold: 75,
+    autopilotEnabled: false,
+    imagesEnabled: false,
+  });
   const [sourceFilter, setSourceFilter] = useState<ContentSource | "all">("all");
   const selectedProperty =
     properties.find((property) => property.slug === selectedPropertySlug) ??
@@ -2016,18 +2467,18 @@ function PropertiesView({
   const propertySections: {
     icon: ReactNode;
     label: string;
-    tab: "profile" | "content" | "settings";
+    tab: "profile" | "content" | "performance" | "settings";
   }[] = [
     { icon: <FileText size={16} />, label: "Brand context", tab: "profile" },
     { icon: <ListChecks size={16} />, label: "Content", tab: "content" },
+    { icon: <BarChart3 size={16} />, label: "Performance", tab: "performance" },
     { icon: <Settings size={16} />, label: "Publishing", tab: "settings" },
   ];
 
-  function handleAddProperty(event: FormEvent<HTMLFormElement>) {
+  function handleWizardFinish(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const data = new FormData(event.currentTarget);
-    const name = String(data.get("name") ?? "").trim();
-    const domain = String(data.get("baseUrl") ?? "").trim();
+    const name = wizard.name.trim();
+    const domain = wizard.baseUrl.trim();
     const slugBase = derivePropertySlug(domain || name);
     const existingSlugs = new Set(properties.map((property) => property.slug));
     let slug = slugBase;
@@ -2037,18 +2488,60 @@ function PropertiesView({
       suffix += 1;
     }
     if (!slug) return;
-    onAddProperty({
+    const property: PropertyConfig = {
       slug,
       name: name || domain || slug,
       domain,
-      language: String(data.get("language")) === "Spanish" ? "Spanish" : "English",
-      threshold: 75,
+      language: wizard.language,
+      threshold: wizard.threshold,
       active: true,
-      imagesEnabled: false,
+      imagesEnabled: wizard.imagesEnabled,
       revalidateUrl: "",
       revalidateSecret: "",
+    };
+    onAddProperty(
+      property,
+      {
+        property: slug,
+        voice: wizard.voice,
+        audience: wizard.audience,
+        pillars: wizard.pillars,
+        banned: "",
+        cta: "",
+        styleExamples: [],
+        defaultCtas: [],
+        visualStyleDescription: "",
+        visualPalette: "",
+        visualRules: "",
+      },
+      wizard.contextMd.trim()
+        ? {
+            id: makeId("doc"),
+            property: slug,
+            title: wizard.contextTitle.trim() || "Brand context",
+            contentMd: wizard.contextMd,
+            source: "written",
+            active: true,
+            sortOrder: 0,
+            createdAt: new Date().toISOString(),
+          }
+        : undefined,
+      { enabled: wizard.autopilotEnabled },
+    );
+    setWizard({
+      name: "",
+      baseUrl: "",
+      language: "English",
+      voice: "",
+      audience: "",
+      pillars: "",
+      contextTitle: "Brand context",
+      contextMd: "",
+      threshold: 75,
+      autopilotEnabled: false,
+      imagesEnabled: false,
     });
-    event.currentTarget.reset();
+    setWizardStep(1);
     onSelectProperty(slug);
     onSetTab("profile");
     setShowAddProperty(false);
@@ -2142,26 +2635,170 @@ function PropertiesView({
                 New property
               </button>
             ) : (
-              <form className="space-y-3" onSubmit={handleAddProperty}>
-                <Field label="Name">
-                  <input className={fieldClass} name="name" />
-                </Field>
-                <Field label="Base URL">
-                  <input className={fieldClass} name="baseUrl" placeholder="https://example.com" />
-                </Field>
-                <Field label="Language">
-                  <select className={fieldClass} name="language">
-                    <option>English</option>
-                    <option>Spanish</option>
-                  </select>
-                </Field>
-                <div className="grid gap-2 sm:grid-cols-2">
+              <form className="space-y-4" onSubmit={handleWizardFinish}>
+                <div className="flex items-center justify-between gap-2">
+                  <p className="font-mono text-xs uppercase text-white/45">
+                    Step {wizardStep} of 4
+                  </p>
+                  <div className="flex gap-1">
+                    {[1, 2, 3, 4].map((step) => (
+                      <span
+                        className={`h-1.5 w-8 ${wizardStep >= step ? "bg-emerald-300" : "bg-white/10"}`}
+                        key={step}
+                      />
+                    ))}
+                  </div>
+                </div>
+
+                {wizardStep === 1 && (
+                  <div className="space-y-3">
+                    <Field label="Name">
+                      <input
+                        className={fieldClass}
+                        onChange={(event) => setWizard({ ...wizard, name: event.target.value })}
+                        value={wizard.name}
+                      />
+                    </Field>
+                    <Field label="Base URL">
+                      <input
+                        className={fieldClass}
+                        onChange={(event) => setWizard({ ...wizard, baseUrl: event.target.value })}
+                        placeholder="https://example.com"
+                        value={wizard.baseUrl}
+                      />
+                    </Field>
+                    <Field label="Language">
+                      <select
+                        className={fieldClass}
+                        onChange={(event) =>
+                          setWizard({
+                            ...wizard,
+                            language: event.target.value === "Spanish" ? "Spanish" : "English",
+                          })
+                        }
+                        value={wizard.language}
+                      >
+                        <option>English</option>
+                        <option>Spanish</option>
+                      </select>
+                    </Field>
+                  </div>
+                )}
+
+                {wizardStep === 2 && (
+                  <div className="space-y-3">
+                    <Field label="Voice">
+                      <textarea
+                        className={`${fieldClass} min-h-24`}
+                        onChange={(event) => setWizard({ ...wizard, voice: event.target.value })}
+                        placeholder="Clear, practical, confident without hype."
+                        value={wizard.voice}
+                      />
+                    </Field>
+                    <Field label="Audience">
+                      <textarea
+                        className={`${fieldClass} min-h-24`}
+                        onChange={(event) => setWizard({ ...wizard, audience: event.target.value })}
+                        placeholder="Founders, operators, and leaders who need better systems."
+                        value={wizard.audience}
+                      />
+                    </Field>
+                    <Field label="Pillars">
+                      <input
+                        className={fieldClass}
+                        onChange={(event) => setWizard({ ...wizard, pillars: event.target.value })}
+                        placeholder="AI operations, content strategy, founder leverage"
+                        value={wizard.pillars}
+                      />
+                    </Field>
+                  </div>
+                )}
+
+                {wizardStep === 3 && (
+                  <div className="space-y-3">
+                    <p className="text-sm text-white/55">
+                      Context docs are read on every generation, so the Engine has enough brand memory to write safely.
+                    </p>
+                    <Field label="Doc title">
+                      <input
+                        className={fieldClass}
+                        onChange={(event) => setWizard({ ...wizard, contextTitle: event.target.value })}
+                        value={wizard.contextTitle}
+                      />
+                    </Field>
+                    <Field label="Context">
+                      <textarea
+                        className={`${fieldClass} min-h-36`}
+                        onChange={(event) => setWizard({ ...wizard, contextMd: event.target.value })}
+                        placeholder="Positioning, offers, terminology, origin story, and things never to say."
+                        value={wizard.contextMd}
+                      />
+                    </Field>
+                  </div>
+                )}
+
+                {wizardStep === 4 && (
+                  <div className="space-y-3">
+                    <Field label="Publishing posture">
+                      <select
+                        className={fieldClass}
+                        onChange={(event) => setWizard({ ...wizard, threshold: Number(event.target.value) })}
+                        value={wizard.threshold}
+                      >
+                        <option value={90}>Careful - hold more for review</option>
+                        <option value={75}>Balanced - recommended</option>
+                        <option value={50}>Trusting - publish more automatically</option>
+                      </select>
+                    </Field>
+                    <label className="flex items-center gap-2 text-sm text-white/70">
+                      <input
+                        checked={wizard.autopilotEnabled}
+                        className="accent-emerald-300"
+                        onChange={(event) => setWizard({ ...wizard, autopilotEnabled: event.target.checked })}
+                        type="checkbox"
+                      />
+                      Turn on Autopilot
+                    </label>
+                    <label className="flex items-center gap-2 text-sm text-white/70">
+                      <input
+                        checked={wizard.imagesEnabled}
+                        className="accent-cyan-300"
+                        onChange={(event) => setWizard({ ...wizard, imagesEnabled: event.target.checked })}
+                        type="checkbox"
+                      />
+                      Allow hero images
+                    </label>
+                    <div className="border border-cyan-300/20 bg-cyan-300/10 p-3 text-sm text-cyan-100/80">
+                      After finishing, deploy the site integration snippet and set the property revalidate secret.
+                    </div>
+                  </div>
+                )}
+
+                <div className="grid gap-2 sm:grid-cols-3">
                   <button
-                    className="border border-emerald-300/40 bg-emerald-300 px-3 py-2 text-sm font-semibold text-[#08100d]"
-                    type="submit"
+                    className="border border-white/10 px-3 py-2 text-sm text-white/65 hover:bg-white/[0.04] disabled:opacity-40"
+                    disabled={wizardStep === 1}
+                    onClick={() => setWizardStep((step) => Math.max(1, step - 1))}
+                    type="button"
                   >
-                    Create
+                    Back
                   </button>
+                  {wizardStep < 4 ? (
+                    <button
+                      className="border border-emerald-300/40 bg-emerald-300 px-3 py-2 text-sm font-semibold text-[#08100d]"
+                      onClick={() => setWizardStep((step) => Math.min(4, step + 1))}
+                      type="button"
+                    >
+                      Next
+                    </button>
+                  ) : (
+                    <button
+                      className="border border-emerald-300/40 bg-emerald-300 px-3 py-2 text-sm font-semibold text-[#08100d]"
+                      type="submit"
+                    >
+                      Finish
+                    </button>
+                  )}
                   <button
                     className="border border-white/10 px-3 py-2 text-sm text-white/65 hover:bg-white/[0.04]"
                     onClick={() => setShowAddProperty(false)}
@@ -2177,7 +2814,7 @@ function PropertiesView({
       </div>
 
       <Panel title={selectedProperty.domain}>
-        <div className="mb-5 grid gap-2 sm:grid-cols-3">
+        <div className="mb-5 grid gap-2 sm:grid-cols-4">
           {propertySections.map((section) => (
             <button
               className={`flex items-center justify-center gap-2 border px-3 py-2.5 text-sm ${
@@ -2441,6 +3078,19 @@ function PropertiesView({
               onSelect={onSelectContent}
             />
           </div>
+        )}
+
+        {propertyTab === "performance" && (
+          <PerformanceView
+            content={content}
+            days={performanceDays}
+            gscConnected={gscConnected}
+            metrics={metrics}
+            onDaysChange={onPerformanceDaysChange}
+            onPropertyChange={() => undefined}
+            properties={properties}
+            selectedProperty={selectedProperty.slug}
+          />
         )}
 
         {propertyTab === "settings" && (
@@ -2862,6 +3512,7 @@ function PerformanceView({
 
 function SettingsView({
   apiKeys,
+  autopilotSettings,
   cron,
   gscConnected,
   models,
@@ -2871,10 +3522,12 @@ function SettingsView({
   onReset,
   onRoutingRulesChange,
   onThresholdChange,
+  onUpdateAutopilotSetting,
   properties,
   routingRules,
 }: {
   apiKeys: EngineState["apiKeys"];
+  autopilotSettings: AutopilotSetting[];
   cron: string;
   gscConnected: boolean;
   models: ModelRegistryEntry[];
@@ -2884,11 +3537,50 @@ function SettingsView({
   onReset: () => void;
   onRoutingRulesChange: (routingRules: RoutingRule[]) => void;
   onThresholdChange: (property: PropertySlug, threshold: number) => void;
+  onUpdateAutopilotSetting: (property: PropertySlug, patch: Partial<AutopilotSetting>) => void;
   properties: PropertyConfig[];
   routingRules: RoutingRule[];
 }) {
   const estimatedCost = estimateArticleCost(models, routingRules);
   const hasQaRule = routingRules.some((rule) => rule.task === "qa");
+  const draftRule = routingRules.find((rule) => rule.task === "draft" && rule.property === "all");
+  const qaRule = routingRules.find((rule) => rule.task === "qa" && rule.property === "all");
+  const imageModel = models.find((model) => model.capabilities.includes("image_gen") && model.active);
+  const draftModel = models.find((model) => model.id === draftRule?.modelChain[0]);
+  const qaModel = models.find((model) => model.id === qaRule?.modelChain[0]);
+  function updateGlobalRuleHead(task: RoutingTask, modelId: string) {
+    const existing = routingRules.find((rule) => rule.task === task && rule.property === "all");
+    if (!modelId) {
+      if (existing) {
+        onRoutingRulesChange(routingRules.filter((rule) => rule.id !== existing.id));
+      }
+      return;
+    }
+    if (existing) {
+      onRoutingRulesChange(
+        routingRules.map((rule) =>
+          rule.id === existing.id
+            ? { ...rule, modelChain: [modelId, ...rule.modelChain.filter((id) => id !== modelId)] }
+            : rule,
+        ),
+      );
+      return;
+    }
+    onRoutingRulesChange([
+      ...routingRules,
+      {
+        id: makeId("rule"),
+        task,
+        property: "all",
+        contentType: "all",
+        language: "all",
+        modelChain: [modelId],
+        priority: 0,
+        active: true,
+        notes: "Simple Settings model picker.",
+      },
+    ]);
+  }
   function updateModel(id: string, patch: Partial<ModelRegistryEntry>) {
     onModelsChange(
       models.map((model) => (model.id === id ? { ...model, ...patch } : model)),
@@ -2938,7 +3630,115 @@ function SettingsView({
   }
 
   return (
-    <div className="grid gap-5 xl:grid-cols-2">
+    <div className="space-y-5">
+      <div className="grid gap-5 xl:grid-cols-3">
+        <Panel title="Publishing">
+          <div className="space-y-3">
+            {properties.map((property) => (
+              <div className="border border-white/10 bg-white/[0.025] p-3" key={property.slug}>
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <p className="font-medium">{property.domain}</p>
+                    <p className="mt-1 text-sm text-white/50">
+                      {thresholdLabel(property.threshold)}
+                    </p>
+                  </div>
+                  <Badge tone="gray">{property.threshold}</Badge>
+                </div>
+                <div className="mt-3 grid grid-cols-3 gap-2">
+                  {[
+                    ["Careful", 90],
+                    ["Balanced", 75],
+                    ["Trusting", 50],
+                  ].map(([label, value]) => (
+                    <button
+                      className={`border px-2 py-2 text-xs ${
+                        property.threshold === value
+                          ? "border-emerald-300/35 bg-emerald-300/10 text-emerald-100"
+                          : "border-white/10 text-white/60 hover:bg-white/[0.04]"
+                      }`}
+                      key={String(label)}
+                      onClick={() => onThresholdChange(property.slug, Number(value))}
+                      type="button"
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        </Panel>
+
+        <Panel title="Autopilot">
+          <div className="space-y-3">
+            {autopilotSettings.map((setting) => {
+              const property = properties.find((entry) => entry.slug === setting.property);
+              return (
+                <div className="border border-white/10 bg-white/[0.025] p-3" key={setting.property}>
+                  <div className="flex items-center justify-between gap-3">
+                    <p className="font-medium">{property?.domain ?? setting.property}</p>
+                    <label className="flex items-center gap-2 text-sm text-white/65">
+                      <input
+                        checked={setting.enabled}
+                        className="accent-emerald-300"
+                        onChange={(event) =>
+                          onUpdateAutopilotSetting(setting.property, {
+                            enabled: event.target.checked,
+                          })
+                        }
+                        type="checkbox"
+                      />
+                      {setting.enabled ? "On" : "Off"}
+                    </label>
+                  </div>
+                  <p className="mt-2 text-sm text-white/55">{autopilotSummary(setting)}</p>
+                </div>
+              );
+            })}
+          </div>
+        </Panel>
+
+        <Panel title="AI setup">
+          <div className="space-y-3 text-sm text-white/65">
+            <p>
+              Articles written by {draftModel?.displayName ?? "the default model"} · Checked by{" "}
+              {qaModel?.displayName ?? "the default model"} · Images by{" "}
+              {imageModel?.displayName ?? "not configured"}
+            </p>
+            <Field label="Writing model">
+              <select
+                className={fieldClass}
+                onChange={(event) => updateGlobalRuleHead("draft", event.target.value)}
+                value={draftModel?.id ?? ""}
+              >
+                <option value="">Default</option>
+                {models.filter((model) => model.capabilities.includes("text")).map((model) => (
+                  <option key={model.id} value={model.id}>{model.displayName}</option>
+                ))}
+              </select>
+            </Field>
+            <Field label="Checking model">
+              <select
+                className={fieldClass}
+                onChange={(event) => updateGlobalRuleHead("qa", event.target.value)}
+                value={qaModel?.id ?? ""}
+              >
+                <option value="">Default</option>
+                {models.filter((model) => model.capabilities.includes("text")).map((model) => (
+                  <option key={model.id} value={model.id}>{model.displayName}</option>
+                ))}
+              </select>
+            </Field>
+          </div>
+        </Panel>
+      </div>
+
+      <details className="border border-white/10 bg-white/[0.025] p-4">
+        <summary className="cursor-pointer text-sm font-medium text-white/75">
+          Advanced - you rarely need this
+        </summary>
+        <div className="mt-4 grid gap-5 xl:grid-cols-2">
       <Panel title="Models">
         <div className="space-y-4">
           <div className="grid gap-3 md:grid-cols-3">
@@ -3199,6 +3999,8 @@ function SettingsView({
           tone="red"
         />
       </Panel>
+        </div>
+      </details>
     </div>
   );
 }
@@ -3486,6 +4288,21 @@ function MiniStat({ label, value }: { label: string; value: string }) {
     <div className="border border-white/10 bg-white/[0.025] p-3">
       <p className="font-mono text-xs uppercase text-white/40">{label}</p>
       <p className="mt-2 line-clamp-2 text-sm text-white/75">{value || "-"}</p>
+    </div>
+  );
+}
+
+function Sparkline({ values }: { values: number[] }) {
+  const max = Math.max(...values, 1);
+  return (
+    <div className="mt-3 flex h-8 items-end gap-1">
+      {values.map((value, index) => (
+        <span
+          className="flex-1 bg-emerald-300/70"
+          key={`${value}-${index}`}
+          style={{ height: `${Math.max(4, (value / max) * 32)}px` }}
+        />
+      ))}
     </div>
   );
 }
@@ -4267,6 +5084,37 @@ function aggregateDaily(metrics: ContentMetricDaily[], days: 7 | 30 | 90) {
   });
 }
 
+function pageviewsForProperty(
+  content: ContentItem[],
+  metrics: ContentMetricDaily[],
+  property: PropertySlug,
+  days: number,
+) {
+  return sparklineForProperty(content, metrics, property, days)
+    .reduce((sum, value) => sum + value, 0)
+    .toLocaleString();
+}
+
+function sparklineForProperty(
+  content: ContentItem[],
+  metrics: ContentMetricDaily[],
+  property: PropertySlug,
+  days: number,
+) {
+  const propertyIds = new Set(
+    content.filter((item) => item.property === property).map((item) => item.id),
+  );
+  const today = new Date("2026-07-14T12:00:00.000Z");
+  return Array.from({ length: days }, (_, offset) => {
+    const date = new Date(today);
+    date.setUTCDate(today.getUTCDate() - (days - 1 - offset));
+    const key = date.toISOString().slice(0, 10);
+    return metrics
+      .filter((metric) => metric.date === key && propertyIds.has(metric.contentItemId))
+      .reduce((sum, metric) => sum + metric.pageviews, 0);
+  });
+}
+
 function estimatePrimaryKeyword(item: ContentItem) {
   return item.keywords[0] ?? item.title.split(/\s+/).slice(0, 2).join(" ");
 }
@@ -4382,6 +5230,12 @@ function sourceLabel(source: ContentSource) {
   return source.replaceAll("_", " ");
 }
 
+function thresholdLabel(threshold: number) {
+  if (threshold >= 85) return "Careful: more pieces wait for approval.";
+  if (threshold <= 60) return "Trusting: strong drafts publish with less review.";
+  return "Balanced: recommended mix of automation and review.";
+}
+
 function statusLabel(status: ContentStatus) {
   const labels: Record<ContentStatus, string> = {
     drafting: "Drafting",
@@ -4396,18 +5250,15 @@ function statusLabel(status: ContentStatus) {
 }
 
 function activeViewLabel(view: View) {
+  if (view === "settings") return "Settings";
   return navItems.find((item) => item.view === view)?.label ?? "Workspace";
 }
 
 function viewTitle(view: View) {
   const titles: Record<View, string> = {
-    quick: "Generate content",
-    overview: "Pipeline overview",
+    home: "Run the day",
+    content: "Content",
     properties: "Properties",
-    review: "Quality review",
-    performance: "Performance",
-    calendar: "Publishing calendar",
-    topics: "Topic backlog",
     settings: "Engine settings",
   };
   return titles[view];

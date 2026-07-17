@@ -1,5 +1,5 @@
 # PROJECT_MEMORY.md
-> Last updated: 2026-07-16 | Session #7 | Agent: Codex
+> Last updated: 2026-07-17 | Session #9 | Agent: Codex
 
 ---
 
@@ -29,7 +29,7 @@ Herzen Content Engine is a centralized AI content hub for generating, quality-ch
 
 ## Current State
 
-The repository is initialized locally on `main` and points to `git@github.com:herzenco/HerzenCo-ContentGenerator.git`. Next.js has been scaffolded and the Phase 0 plus Update 01 and Update 02 Supabase migrations have been created. The app is now a clickable local operator console with Quick Generate, overview, properties, review queue, performance, calendar, topics, settings, model routing, and optional hero-image controls backed by browser local storage.
+The repository is initialized locally on `main` and points to `https://github.com/herzenco/HerzenCo-ContentGenerator.git`. Next.js has been scaffolded and the Phase 0 plus Update 01, Update 02, and Update 03 Supabase migrations have been created. The app is now a clickable local operator console with simplified Home, Content, Properties, and Settings destinations backed by browser local storage.
 
 Supabase SSR packages are installed and the app now has reusable browser/server helpers plus middleware that refreshes auth sessions. Local `.env.local` contains the Supabase project URL, publishable key, OpenAI key, and Anthropic key; it is ignored by git.
 
@@ -60,6 +60,8 @@ The dashboard is gated by Supabase Auth. Users can sign in or create an account 
 - Added email confirmation callback route at `/auth/confirm`.
 - Added dashboard sign-out.
 - Added and applied the Supabase migration that blocks non-`@herzenco.co` Auth users.
+- Implemented Update 03 in the local console and live Supabase schema: Autopilot settings, routing flip, `autopilot_prompt`, `autopilot` source, and `title_embedding`.
+- Implemented Update 04 as a pure UX reorganization: 3-item navigation plus Settings, Home daily workflow, Content List/Calendar/Ideas modes, per-property Performance tab, simplified Settings everyday cards, Advanced settings disclosure, humanized review/warning copy, property setup wizard, and legacy redirect routes.
 
 ## Key Decisions Made
 
@@ -73,6 +75,7 @@ The dashboard is gated by Supabase Auth. Users can sign in or create an account 
 - Search Console is represented as settings/env scaffolding and graceful UI degradation until OAuth credentials are available.
 - Model routing is an override layer. The seeded local state has zero active routing rules, so the default generation path remains unchanged until an operator adds/enables a rule.
 - Hero images are off by default for every property; image failures and incomplete visual profiles never block text publishing.
+- Update 04 keeps the feature set intact but hides power-user machinery behind deliberate tabs/disclosures so daily generation, review, and scheduling are accessible from Home or Content in one to two clicks.
 
 ## Known Bugs / Issues
 
@@ -121,6 +124,8 @@ Update 02 migration: `supabase/migrations/20260715093000_update_02_model_routing
 
 Auth migration: `supabase/migrations/20260716151500_auth_herzenco_domain.sql`.
 
+Update 03 migration: `supabase/migrations/20260717120000_update_03_autopilot_routing.sql`.
+
 Tables: `properties`, `brand_profiles`, `topics`, `content_items`, `content_versions`, `eval_results`, `jobs`, `job_runs`, `schedules`, `api_keys`, `prompt_templates`.
 
 `content_items` now includes `scheduled` status, `publish_at`, and `source` (`schedule`, `quick_generate`, `api`, `repurpose`) from the updated product spec.
@@ -128,6 +133,8 @@ Tables: `properties`, `brand_profiles`, `topics`, `content_items`, `content_vers
 Update 01 adds `brand_context_docs`, `content_metrics_daily`, `content_versions.context_hash`, and `content_versions.social_meta`.
 
 Update 02 adds `models`, `routing_rules`, `properties.images_enabled`, brand visual profile columns, `content_versions.hero_image_alt`, `job_runs.registry_model_id`, `job_runs.fallback_used`, `job_runs.provider_errors`, and the public `hero-images` storage bucket.
+
+Update 03 adds `autopilot_settings`, `content_items.title_embedding vector(1536)`, `autopilot` source, `autopilot_prompt` task, OpenAI premium model seed, and global routing rules for draft, QA, and autopilot prompt.
 
 Seed data: `supabase/seed.sql` inserts `herzenco` and `humanismo-evolutivo` properties plus placeholder brand profiles.
 
@@ -138,6 +145,16 @@ Seed data: `supabase/seed.sql` inserts `herzenco` and `humanismo-evolutivo` prop
 - Launch sites: `https://herzenco.co`, `https://humanismoevolutivo.com`
 
 ## Session Log
+
+### Session #9 - 2026-07-17
+
+Agent: Codex
+
+Branch/Commit: `main`, no commit yet
+
+Summary: Implemented Update 04 simplification with Home/Content/Properties/Settings navigation, Home daily workflow, Content List/Calendar/Ideas merge, per-property Performance tab, Settings everyday cards plus Advanced section, humanized review/warning messages, property setup wizard, and legacy redirect routes. Verified with `npm run lint` and `npm run build`.
+
+Files changed: `src/components/content-engine-app.tsx`, `src/lib/humanize.ts`, legacy route redirect pages, project memory.
 
 ### Session #8 - 2026-07-17
 
