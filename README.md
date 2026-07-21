@@ -7,7 +7,17 @@ Launch targets:
 - `herzenco.co` for English content
 - `humanismoevolutivo.com` for Spanish content
 
-The engine is the hub. The sites are thin consumers that will fetch published content through the engine's Content API.
+The engine is the hub. Static sites consume the public Content API during their Vercel builds.
+
+## Production content pipeline
+
+- Operator console and API: `https://content.herzenco.co`
+- Published feed: `GET /api/content?property=herzenco`
+- Published article: `GET /api/content/{slug}?property=herzenco`
+- Authenticated publish: `POST /api/content`
+- Website consumer: the Herzen Co. static build fetches the feed, generates resource pages, updates its listing and sitemap, and publishes the result through Vercel.
+
+Publishing requires an authenticated `@herzenco.co` Supabase session. Public endpoints read from the RLS-protected `published_content_feed`, which contains publish-safe fields only. A successful publish triggers the property-specific Vercel deploy hook stored in `properties.revalidate_url`.
 
 The primary manual workflow is Quick Generate: submit a short prompt, pick the target property, optionally set a publish date, and let the same queued pipeline draft, QA, enrich, publish, schedule, or route the item to review.
 
@@ -22,7 +32,7 @@ This repo currently contains the Phase 0 foundation:
 - Environment variable template
 - Project memory log for future agent handoffs
 
-The local console lets you exercise Quick Generate, review approvals, regeneration, publishing, scheduled items, topic loading, brand profile edits, and settings. Quick Generate now sends authenticated server-side requests to the configured Anthropic or OpenAI provider. Supabase persistence, cron execution, the public Content API, and external API authentication are still later implementation phases.
+The local console lets you exercise Quick Generate, review approvals, regeneration, publishing, scheduled items, topic loading, brand profile edits, and settings. Quick Generate sends authenticated server-side requests to the configured Anthropic or OpenAI provider. Published content is persisted in Supabase and exposed through the public Content API.
 
 ## Update 01: Properties, Context, Performance
 
@@ -109,7 +119,7 @@ Current schema posture:
 
 - RLS is enabled on every public table.
 - Direct table grants are for `authenticated` and `service_role`.
-- `anon` is not granted table access; public content should be exposed through Next.js API routes.
+- `anon` can select only the publish-safe `published_content_feed`; all authoring tables remain protected.
 - `content_items` supports `scheduled` status, `publish_at`, and `source` for Quick Generate, API, schedule, and repurposing origins.
 - Update 01 adds `brand_context_docs`, `content_metrics_daily`, `content_versions.context_hash`, and `content_versions.social_meta`.
 - Update 02 adds `models`, `routing_rules`, `properties.images_enabled`, brand visual profile columns, `content_versions.hero_image_alt`, job-run registry metadata, and the public `hero-images` storage bucket.

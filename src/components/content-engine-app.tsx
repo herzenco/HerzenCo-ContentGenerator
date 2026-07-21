@@ -666,6 +666,33 @@ export function ContentEngineApp({ userEmail }: ContentEngineAppProps) {
     }));
   }
 
+  async function persistPublishedContent(item: ContentItem) {
+    try {
+      const response = await fetch("/api/content", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          property: item.property,
+          contentType: item.contentType,
+          title: item.title,
+          body: item.body,
+          excerpt: item.excerpt,
+          metaTitle: item.metaTitle,
+          metaDescription: item.metaDescription,
+          qualityScore: item.qualityScore,
+          publishedAt: item.publishedAt,
+          heroImageUrl: item.heroImageUrl ?? null,
+          heroImageAlt: item.heroImageAlt ?? null,
+        }),
+      });
+      const payload = (await response.json()) as { data?: { slug?: string }; message?: string };
+      if (!response.ok) throw new Error(payload.message || "Website publishing failed");
+      setToast(`Published /resources/${payload.data?.slug ?? ""}/`);
+    } catch (error) {
+      setToast(error instanceof Error ? error.message : "Website publishing failed");
+    }
+  }
+
   function finishPipeline(item: ContentItem, forceReview = false) {
     const property = state.properties.find((entry) => entry.slug === item.property);
     const brand = state.brands.find((entry) => entry.property === item.property);
@@ -702,15 +729,20 @@ export function ContentEngineApp({ userEmail }: ContentEngineAppProps) {
     }, 700);
 
     window.setTimeout(() => {
-      setContentItem(item.id, {
+      const publishedAt = nextStatus === "published" ? new Date().toISOString() : "";
+      const finalPatch: Partial<ContentItem> = {
         status: nextStatus,
         qualityScore: score,
         evals,
         contextHash,
         servedModels,
-        publishedAt: nextStatus === "published" ? new Date().toISOString() : "",
-      });
+        publishedAt,
+      };
+      setContentItem(item.id, finalPatch);
       setToast(statusLabel(nextStatus));
+      if (nextStatus === "published") {
+        void persistPublishedContent({ ...item, ...finalPatch });
+      }
     }, 1700);
 
     if (item.imageStatus === "queued") {
@@ -845,11 +877,14 @@ export function ContentEngineApp({ userEmail }: ContentEngineAppProps) {
     const isFuture = item.publishAt
       ? new Date(item.publishAt).getTime() > Date.now()
       : false;
-    setContentItem(id, {
+    const publishedAt = isFuture ? "" : new Date().toISOString();
+    const patch: Partial<ContentItem> = {
       status: isFuture ? "scheduled" : "published",
-      publishedAt: isFuture ? "" : new Date().toISOString(),
-    });
+      publishedAt,
+    };
+    setContentItem(id, patch);
     setToast(isFuture ? "Scheduled" : "Published");
+    if (!isFuture) void persistPublishedContent({ ...item, ...patch });
   }
 
   function regenerateContent(id: string) {
@@ -882,11 +917,15 @@ export function ContentEngineApp({ userEmail }: ContentEngineAppProps) {
   }
 
   function publishNow(id: string) {
-    setContentItem(id, {
+    const item = state.content.find((entry) => entry.id === id);
+    if (!item) return;
+    const patch: Partial<ContentItem> = {
       status: "published",
       publishedAt: new Date().toISOString(),
-    });
+    };
+    setContentItem(id, patch);
     setToast("Published");
+    void persistPublishedContent({ ...item, ...patch });
   }
 
   function addTopic(event: FormEvent<HTMLFormElement>) {
