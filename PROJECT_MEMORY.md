@@ -1,5 +1,5 @@
 # PROJECT_MEMORY.md
-> Last updated: 2026-07-17 | Session #9 | Agent: Codex
+> Last updated: 2026-07-20 | Session #10 | Agent: Codex
 
 ---
 
@@ -29,7 +29,7 @@ Herzen Content Engine is a centralized AI content hub for generating, quality-ch
 
 ## Current State
 
-The repository is initialized locally on `main` and points to `https://github.com/herzenco/HerzenCo-ContentGenerator.git`. Next.js has been scaffolded and the Phase 0 plus Update 01, Update 02, and Update 03 Supabase migrations have been created. The app is now a clickable local operator console with simplified Home, Content, Properties, and Settings destinations backed by browser local storage.
+The repository is initialized locally on `main` and points to `https://github.com/herzenco/HerzenCo-ContentGenerator.git`. Next.js has been scaffolded and the Phase 0 plus Update 01, Update 02, and Update 03 Supabase migrations have been created. The app is now a clickable operator console with simplified Home, Content, Properties, and Settings destinations. Content state remains in browser local storage, while Quick Generate now calls real Anthropic or OpenAI text providers through an authenticated server route.
 
 Supabase SSR packages are installed and the app now has reusable browser/server helpers plus middleware that refreshes auth sessions. Local `.env.local` contains the Supabase project URL, publishable key, OpenAI key, and Anthropic key; it is ignored by git.
 
@@ -84,14 +84,14 @@ The dashboard is gated by Supabase Auth. Users can sign in or create an account 
 - npm reported two moderate advisories in installed dependencies during scaffold generation; no forced audit fix has been run.
 - The app uses local browser storage and simulated pipeline transitions; Supabase persistence, Anthropic calls, cron processing, and real API routes are not wired yet.
 - The metrics beacon endpoint currently validates payloads and returns a local stub; it still needs to be wired to upsert `content_metrics_daily` through the new Supabase server helpers.
-- Provider clients are interface scaffolds only; real Anthropic/OpenAI calls still need the production provider implementation and server-side secret wiring.
+- Provider clients and the authenticated `/api/ai/generate` route are implemented. Local Supabase and provider credentials are restored, and minimal live calls to both OpenAI and Anthropic succeeded on 2026-07-20.
 - Local hero image generation attaches deterministic placeholder paths until OpenAI Images and Supabase Storage upload are wired.
 
 ## Next Steps (Prioritized)
 
 - [ ] Install or enable Supabase CLI, link a Supabase project, and run the migration and seed.
 - [ ] Verify seeded rows are visible in Supabase.
-- [ ] Start Phase 1: add Anthropic provider abstraction, prompt template seeds, and structured output parsing with Zod.
+- [x] Start Phase 1: implement Anthropic/OpenAI provider clients and validate API requests with Zod.
 - [ ] Replace local-storage state with Supabase-backed reads/writes once the project is linked.
 - [ ] In Phase 2, implement internal `POST /api/engine/generate` with the Quick Generate contract and status polling via `GET /api/engine/content/:contentItemId`.
 - [x] Add lazy Supabase server client helpers when application code starts reading/writing the database.
@@ -101,7 +101,7 @@ The dashboard is gated by Supabase Auth. Users can sign in or create an account 
 - [ ] Deploy the `site-integration/metrics-beacon.tsx` one-file update to `herzenco.co` and `humanismoevolutivo.com`.
 - [ ] Implement the GSC daily sync once `GSC_CLIENT_ID`, `GSC_CLIENT_SECRET`, and `GSC_REFRESH_TOKEN` are available.
 - [ ] Wire model registry and routing rules to persisted Supabase reads/writes.
-- [ ] Implement real provider calls for Anthropic/OpenAI on the server, with timeout/fallback logging in `job_runs`.
+- [ ] Persist provider calls, timeouts, fallback outcomes, and token usage in `job_runs`.
 - [ ] Connect hero image generation to OpenAI Images and upload outputs into the public `hero-images` Supabase Storage bucket.
 - [ ] Expose `hero_image_url`, `hero_image_alt`, and `social_meta.ogImage` through the Content API.
 - [ ] Configure Supabase Auth Site URL and redirect URLs for production once the Vercel URL/domain is known.
@@ -145,6 +145,18 @@ Seed data: `supabase/seed.sql` inserts `herzenco` and `humanismo-evolutivo` prop
 - Launch sites: `https://herzenco.co`, `https://humanismoevolutivo.com`
 
 ## Session Log
+
+### Session #10 - 2026-07-20
+
+Agent: Codex
+
+Branch/Commit: `main`, uncommitted working tree
+
+Summary: Installed the official OpenAI and Anthropic SDKs plus Zod, replaced provider stubs with real Responses API, Messages API, and OpenAI image calls, added authenticated `/api/ai/generate`, and connected Quick Generate to real server-side text generation. Restored `.env.local`; minimal live requests to OpenAI and Anthropic both succeeded. The private keys must be rotated because they were later exposed in chat/screenshots.
+
+Cleanup: Removed all seeded/demo articles, ideas, performance metrics, context documents, placeholder API keys, and prefilled brand copy from both the browser-local initial state and `supabase/seed.sql`. Preserved properties, model registry, routing, and disabled automation configuration. Cleared the active browser workspace and verified an empty content table.
+
+Validation: `npm run lint`, `npm run typecheck`, and `npm run build` passed. The first build attempt was blocked by sandboxed Google Fonts access; the approved network-enabled retry passed. Live OpenAI and Anthropic smoke tests passed.
 
 ### Session #9 - 2026-07-17
 

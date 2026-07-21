@@ -16,13 +16,13 @@ The primary manual workflow is Quick Generate: submit a short prompt, pick the t
 This repo currently contains the Phase 0 foundation:
 
 - Next.js 16 App Router with TypeScript, Tailwind, and ESLint
-- Clickable local operator console with browser-persisted demo data
+- Clickable local operator console with browser-persisted workspace data
 - Supabase schema migration for the v1 data model
-- Supabase seed file for both launch properties and placeholder brand profiles
+- Supabase seed file for both launch properties with empty brand profiles ready for setup
 - Environment variable template
 - Project memory log for future agent handoffs
 
-The local console lets you exercise Quick Generate, review approvals, regeneration, publishing, scheduled items, topic loading, brand profile edits, settings, and local API-key placeholders. Real AI generation, Supabase persistence, cron execution, public Content API routes, and external API authentication are still later implementation phases.
+The local console lets you exercise Quick Generate, review approvals, regeneration, publishing, scheduled items, topic loading, brand profile edits, and settings. Quick Generate now sends authenticated server-side requests to the configured Anthropic or OpenAI provider. Supabase persistence, cron execution, the public Content API, and external API authentication are still later implementation phases.
 
 ## Update 01: Properties, Context, Performance
 
@@ -50,7 +50,7 @@ The local console now includes Update 02 as an additive layer:
 - Brand context includes optional visual style, palette, and visual rules fields.
 - Quick Generate shows **Generate hero image after QA** only for image-enabled properties.
 - Review and Current Run show model-call logs, image status, image-check result, mock hero image path, alt text, and an image regenerate action.
-- Local image generation is simulated until real OpenAI/Supabase Storage wiring is connected; text publishing is not blocked by image failures.
+- The OpenAI image provider can generate image data, but the dashboard still uses a local placeholder until Supabase Storage upload is connected; text publishing is not blocked by image failures.
 
 ## Local Development
 
@@ -78,6 +78,7 @@ Required for early phases:
 - `NEXT_PUBLIC_SUPABASE_ANON_KEY`
 - `SUPABASE_SERVICE_ROLE_KEY`
 - `ANTHROPIC_API_KEY`
+- `ANTHROPIC_TEXT_MODEL` (defaults to `claude-sonnet-4-6`)
 - `CRON_SECRET`
 - `ENGINE_BASE_URL`
 
@@ -85,6 +86,7 @@ Later phases also use:
 
 - `RESEND_API_KEY`
 - `OPENAI_API_KEY`
+- `OPENAI_TEXT_MODEL` (defaults to `gpt-5.6-terra`)
 - `REPLICATE_API_TOKEN`
 - `GSC_CLIENT_ID`
 - `GSC_CLIENT_SECRET`
@@ -131,17 +133,17 @@ The endpoint should return `content_item_id` so callers can poll `GET /api/engin
 
 The current app uses browser local storage under `herzen-content-engine-state-v1`.
 
-Clickable local workflows:
+Clickable workflows:
 
-- Generate a demo content item from the Quick Generate form.
+- Generate a real AI draft from the Quick Generate form through the selected model route.
 - Watch the simulated run move through draft and QA into published, scheduled, or review.
 - Approve, regenerate, reject, or publish content.
 - Add backlog topics and load them into Quick Generate.
 - Edit brand profile fields.
-- Adjust auto-publish thresholds and create local placeholder API keys.
+- Adjust auto-publish thresholds and create local API keys.
 - Manage model registry rows and routing rules from Settings.
 - Enable optional hero images per property, add a visual profile, and regenerate a local hero image placeholder from Review.
-- Reset demo data from Settings.
+- Clear local workspace data from Settings.
 
 ## Build Phases
 

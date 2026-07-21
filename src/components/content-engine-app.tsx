@@ -13,7 +13,6 @@ import {
   KeyRound,
   ListChecks,
   LogOut,
-  PanelLeft,
   Pencil,
   Play,
   RefreshCw,
@@ -22,7 +21,6 @@ import {
   Send,
   Settings,
   ShieldCheck,
-  Sparkles,
   Upload,
   X,
   Zap,
@@ -270,6 +268,97 @@ const navItems: {
   { view: "properties", label: "Properties", icon: <Globe2 size={17} /> },
 ];
 
+const herzenVoiceGuide = `# Herzen Co. — Content, Voice & Messaging Guide
+
+## Brand architecture
+Herzen Co. is a holding company and routing layer for two operating brands. It does not sell directly to end customers. Always identify which brand is speaking.
+
+- Herzen Co.: the calm, credible, minimal corporate parent. Tagline: “Building and Scaling Digital Ventures.” Route visitors toward the relevant operating brand.
+- Xyren: a productized website conversion system for consultation-led service businesses. It is not custom web design. It turns traffic into qualified, booked appointments through clear positioning, intent-to-action structure, lead capture and filtering, automated booking, and bad-lead screening. Typical launch window: 5–10 days.
+- Xelerate: subscription-based fractional product leadership for founders and digital teams needing ongoing product strategy, execution oversight, systems thinking, and operational leverage without a full-time hire.
+
+## Voice
+Be direct, concise, specific, systems-minded, and clear. Say the thing without preamble. Remove adjectives that do not carry weight. Never fake certainty or manufacture urgency. Confidence must come from mechanisms, evidence, and specificity. Prefer plain words over jargon and understanding over cleverness. Name the buyer, pain, mechanism, and outcome.
+
+Adjust the tone by brand:
+- Herzen Co.: corporate-parent, credible, minimal, and oriented toward routing.
+- Xyren: practical, confident, benefit-first, and written for service-business owners whose sites do not produce qualified appointments.
+- Xelerate: strategic, senior, calm, and advisory rather than vendor-like.
+
+## Positioning and messages
+Herzen Co. builds and scales digital ventures. A useful two-door frame is: “Need a website conversion system?” → Xyren. “Need product leadership?” → Xelerate.
+
+For Xyren, preserve these anchors: not custom web design; systems over pages; qualified booked appointments; 5–10 day launch; intent → action; bad-lead filtering; automation where it creates leverage. Primary CTA: “Get your free project plan.”
+
+For Xelerate, preserve these anchors: product leadership without the full-time hire; ongoing strategy plus execution oversight; systems thinking and operational leverage; subscription engagement; evidence and measurable case studies before the call. Primary CTA: “Book a free 20-minute call.” Do not publish pricing unless it is verified as current.
+
+## Topics
+Xyren: why service-business websites fail to convert; lead qualification and screening; booking automation; launch speed and custom-build bloat; positioning; intent-to-action structure; industry-specific content for plumbers, roofers, lawyers, consultants, and other consultation-led services. Every article needs a relevant lead-capture path.
+
+Xelerate: fractional versus full-time product leadership; product strategy and execution; systems thinking and operational leverage; reducing time-to-launch; execution oversight; outcome-driven case studies.
+
+Herzen Co.: concise venture-building and scaling narratives plus clear brand descriptions that route visitors to Xyren or Xelerate. AI-orchestrated, brand-governed production systems may be used as a thought-leadership theme when appropriate.
+
+## Formats
+Use intent-to-action website copy, clustered blog series, email and newsletters, one-pagers, industry pages, measurable case studies, LinkedIn-forward social repurposing, and template-driven short-form video.
+
+## Guardrails
+Do name the ICP, lead with outcomes, place the strongest relevant CTA early, handle objections, support claims with evidence, and keep one idea per sentence.
+
+Do not call Xyren “web design” or reduce it to pages. Avoid generic agency copy, unsupported metrics, manufactured urgency, adjective walls, jargon, and content without a lead-capture path. Keep adjacent client work—including retail-media, LiveRamp, audience-data, and SAM material—out of brand content unless deliberately approved as a case study.
+
+## Source status
+This guide was compiled July 21, 2026 from project strategy documents and May 2026 audits. The live sites were unavailable during compilation. Verify current site copy, pricing, offers, blog titles, testimonials, and performance claims before presenting them as current facts.`;
+
+const humanismoVoiceGuide = `# Humanismo Evolutivo — Content, Tone & Voice Guide
+
+## Foundation
+Humanismo Evolutivo is the philosophy and foundation based on the work of Marcos Constandse Madrazo. Its central idea is that evolution is not only biological or technological; above all, it is the evolution of consciousness. Its ethical imperative is “Yo soy nosotros”: the human being is an end, never a means, and individual wellbeing is inseparable from collective wellbeing.
+
+Use the provenance line “Basado en la obra filosófica de Marcos Constandse” when appropriate. Spanish is the primary language of composition. Preserve canonical Spanish terms on first use in English.
+
+## Core framework
+Build arguments faithfully from these ideas: reality requires intention, will, project, execution, and information; evolution moves “de lo simple a lo complejo”; the human being is matter and spirit and can become conscious of itself; humanity shares a common origin and absolute dignity; trabajo is an evolutionary tool and a means of autorrealización; conscious, ethical work leads toward paz interior and felicidad.
+
+The five institutional axes are:
+1. Economía con sentido humano.
+2. Conciencia ecológica racional.
+3. Espiritualidad práctica.
+4. Tecnología al servicio del ser humano.
+5. Imperativo Ético — “Yo soy nosotros.”
+
+Keep the distinction between consciencia (awareness, darse cuenta) and conciencia (values, moral conscience). Other important concepts include algoritmos mentales, ego positivo and ego negativo, ente creador, organizador energético, libre mercado with social responsibility, republican democracy with division of powers, and AI as a tool that can potentiate consciousness rather than replace the human being.
+
+## Voice
+The voice is integrative, reasoned, evidence-minded, reverent, hopeful, warm, humane, elevated but accessible, ethically serious, invitational, and lived. Synthesize science with spirituality, individual with collective, reason with love, and progress with responsibility. Use concrete analogies, stepwise reasoning, evolutionary arcs, convergence across traditions, and ethical reframing of loaded concepts. The emotional register is serene, expansive, and encouraging. The reader should finish feeling larger, calmer, and more responsible.
+
+Choose the register for the medium:
+- Philosophical essay: first-person, reasoned, flowing, conviction with humility.
+- Museum or public explainer: direct “tú,” curiosity, wonder, open questions, reader agency.
+- Study guide: structured, teacherly, clear, with key ideas and review questions.
+- Narrative fiction: scenes, dialogue, character, sensory experience; embody rather than state philosophy.
+- Podcast: warm, spoken, reflective, welcoming, and invitational.
+- Foundation: collective “we,” mission-driven, humane, and non-corporate.
+
+## Audience
+Write for a capable, dignified, free reader: the general public and seekers; serious readers and thinkers; leaders and entrepreneurs developing an integral vision; and students. Hand the reader a map, not a verdict.
+
+## Themes
+Prioritize evolution of consciousness; human dignity and the Imperativo Ético; unity of science and spirituality; work as self-realization; rational ecological consciousness; cosmology, life, and humanity; ethical entrepreneurship; inner peace and happiness; technology and AI in service of humanity; convergence of spiritual traditions; critical thinking; identity and free will; integral leadership; and personal plus collective transformation.
+
+## Guardrails
+Always keep science and spirituality married. Present an ente creador as a reasoned inference held with humility, never sectarian dogma. Respect all religious traditions and emphasize their convergence on love of the other. Land on hope and agency.
+
+Never flatten the philosophy into generic self-help, manifestation language, shallow positivity, corporate filler, dogma, or fear-driven ecology. Never preach, shame, become partisan, or claim scientific proof for a thesis presented as logic or faith. Do not portray entrepreneurs, work, markets, or money as inherently corrupt; name abuse honestly while preserving the ethical reframing.
+
+## Canonical lexicon
+Humanismo Evolutivo; Yo soy nosotros; El otro es como yo; Imperativo Ético; El ser humano es fin y no medio; De lo simple a lo complejo; De la nada, nada puede surgir; niveles de conciencia / consciencia; trabajo; autorrealización; paz interior → felicidad; organizador energético; algoritmos mentales; ego positivo / ego negativo; ente creador; espiritualización de la materia; conciencia ecológica racional; Déjalo ser.
+
+Useful refrains include “Evolucionar es ser,” “Y lo mejor aún está por venir,” and Teilhard de Chardin’s formulation that evolution is the spiritualization of matter. Use quotations selectively and verify attribution.
+
+## Final check
+For every piece: select the right register and language; identify one faithful anchor idea; bridge rather than oppose; carry abstraction with a concrete image; maintain a reasoned, reverent, hopeful, humane tone; end with agency, hope, or an open question; apply the guardrails; and credit Marcos Constandse or the foundation appropriately.`;
+
 const initialState: EngineState = {
   properties: [
     {
@@ -291,186 +380,79 @@ const initialState: EngineState = {
       imagesEnabled: false,
     },
   ],
-  content: [
-    {
-      id: "ci_seed_review",
-      title: "How operator-led AI systems make small teams faster",
-      property: "herzenco",
-      prompt: "Write about using AI systems to remove bottlenecks in small teams.",
-      contentType: "article",
-      status: "needs_review",
-      source: "quick_generate",
-      keywords: ["AI operations", "small teams"],
-      toneOverride: "",
-      qualityScore: 69,
-      publishAt: "",
-      publishedAt: "",
-      createdAt: "2026-07-14T14:28:00.000Z",
-      excerpt:
-        "Small teams move faster when AI handles repeatable knowledge work and humans stay close to judgment calls.",
-      metaTitle: "AI Systems for Small Teams",
-      metaDescription:
-        "A practical look at using AI systems to reduce bottlenecks inside lean operator-led teams.",
-      evals: [
-        {
-          name: "Brand voice",
-          score: 84,
-          passed: true,
-          detail: "Clear and practical.",
-        },
-        {
-          name: "Factual risk",
-          score: 44,
-          passed: false,
-          detail: "One unsupported productivity claim needs review.",
-        },
-        {
-          name: "Structure",
-          score: 78,
-          passed: true,
-          detail: "AEO sections are present.",
-        },
-      ],
-      body: "## The operating layer\n\nAI works best when it removes repeated decisions from the team while keeping humans in control of judgment, taste, and accountability.",
-    },
-    {
-      id: "ci_seed_scheduled",
-      title: "La tecnologia consciente empieza con una pregunta humana",
-      property: "humanismo-evolutivo",
-      prompt: "Una reflexion sobre tecnologia consciente y crecimiento humano.",
-      contentType: "article",
-      status: "scheduled",
-      source: "quick_generate",
-      keywords: ["tecnologia consciente", "humanismo"],
-      toneOverride: "mas reflexivo",
-      qualityScore: 88,
-      publishAt: "2026-07-17T09:00",
-      publishedAt: "",
-      createdAt: "2026-07-13T20:00:00.000Z",
-      excerpt:
-        "La tecnologia puede ampliar lo humano cuando empieza con una intencion clara.",
-      metaTitle: "Tecnologia consciente y humanidad",
-      metaDescription:
-        "Una reflexion sobre tecnologia consciente, cultura y crecimiento humano.",
-      evals: [
-        {
-          name: "Voz de marca",
-          score: 90,
-          passed: true,
-          detail: "Humana y clara.",
-        },
-        {
-          name: "Riesgo factual",
-          score: 92,
-          passed: true,
-          detail: "Sin afirmaciones riesgosas.",
-        },
-      ],
-      body: "## Una pregunta antes de la herramienta\n\nLa tecnologia consciente no empieza con el software, sino con la pregunta que queremos cuidar.",
-    },
-  ],
-  topics: [
-    {
-      id: "topic_1",
-      property: "herzenco",
-      title: "AI content operations for founders",
-      angle: "How to run content as an operating system, not a campaign.",
-      keywords: ["AI content", "founder systems"],
-      priority: 8,
-      status: "backlog",
-      source: "manual",
-    },
-    {
-      id: "topic_2",
-      property: "humanismo-evolutivo",
-      title: "Humanismo en tiempos de automatizacion",
-      angle: "La automatizacion como invitacion a pensar mejor lo humano.",
-      keywords: ["humanismo", "automatizacion"],
-      priority: 7,
-      status: "briefed",
-      source: "ai_suggested",
-    },
-  ],
+  content: [],
+  topics: [],
   brands: [
     {
       property: "herzenco",
       voice:
-        "Clear, strategic, practical, founder-led. Confident without hype.",
+        "Direct, concise, specific, systems-minded, calm, and credible. Say the thing without preamble. Prefer clarity over cleverness and confidence grounded in evidence over hype. Herzen Co. is minimal and routes; Xyren is practical and benefit-first; Xelerate is strategic, senior, and advisory.",
       audience:
-        "Business owners, founders, and leaders looking for systems and AI-enabled growth.",
-      pillars: "AI operations, business systems, content strategy, founder leverage",
+        "Herzen Co. visitors deciding between operating brands; consultation-led service-business owners such as plumbers, roofers, lawyers, and consultants for Xyren; and early-stage or funded founders and operators needing fractional product leadership for Xelerate.",
+      pillars:
+        "Building and scaling digital ventures; conversion systems for service businesses; qualified booked appointments and lead quality; intent-to-action website structure; automation as leverage; fractional product leadership; product strategy and execution oversight; systems thinking and operational leverage; measurable case studies; AI-orchestrated brand-governed production",
       banned:
-        "Unverifiable revenue claims, fabricated customer stories, guaranteed outcomes",
-      cta: "Work with Herzen Co.",
+        "Calling Xyren custom web design or reducing it to pages; generic agency copy; unsupported results or metrics; fake certainty; manufactured urgency; vague ICP language; adjective-heavy copy; empty jargon; content without a lead-capture path; unverified current pricing; adjacent retail-media, LiveRamp, audience-data, or SAM client work unless explicitly approved as a case study",
+      cta:
+        "Route by need: Xyren — Get your free project plan. Xelerate — Book a free 20-minute call. Herzen Co. — direct the visitor to the appropriate operating brand rather than selling from the parent brand.",
       styleExamples: [
-        "Useful beats flashy. Explain the operating principle, then show how to apply it.",
+        "Need a website conversion system? Xyren turns service-business traffic into qualified, booked appointments. Get your free project plan.",
+        "Need product leadership without a full-time hire? Xelerate brings ongoing strategy, execution oversight, and systems thinking. Book a free 20-minute call.",
+        "One buyer. One pain. One mechanism. One outcome. Keep the sentence short and support every claim.",
       ],
-      defaultCtas: [{ name: "Work with Herzen Co.", url: "https://herzenco.co" }],
-      visualStyleDescription: "",
+      defaultCtas: [],
+      visualStyleDescription:
+        "Minimal, credible, systems-led editorial imagery. Show structured workflows, real operators, service-business contexts, product teams, and clear input-to-outcome mechanisms. Keep Herzen Co. restrained, Xyren practical and action-oriented, and Xelerate polished, strategic, and senior.",
       visualPalette: "",
-      visualRules: "no text in images, no faces unless explicitly requested",
+      visualRules:
+        "Avoid generic agency stock imagery, abstract tech hype, fake dashboards, unverified result callouts, decorative complexity, and text-heavy generated images. Visuals should clarify the buyer, operating system, mechanism, or measurable outcome and must never imply unsupported certainty.",
     },
     {
       property: "humanismo-evolutivo",
       voice:
-        "Humanista, reflexivo, claro y esperanzador. Profundo sin solemnidad innecesaria.",
+        "Integrative, reasoned, evidence-minded, reverent, hopeful, warm, humane, elevated but accessible, ethically serious, and invitational. Bridge science with spirituality, individual with collective, reason with love, and progress with responsibility. Use concrete analogies and stepwise reasoning; remain serene and never preachy.",
       audience:
-        "Lectores hispanohablantes interesados en crecimiento humano, tecnologia y cultura.",
-      pillars: "humanismo, evolucion personal, tecnologia consciente, cultura",
+        "Spanish-first general readers and seekers; serious readers and thinkers; leaders and entrepreneurs developing an integral vision; and students. Treat every reader as capable, dignified, and free.",
+      pillars:
+        "Evolution of consciousness; Imperativo Ético and human dignity; science and spirituality; trabajo and autorrealización; conciencia ecológica racional; ethical entrepreneurship; technology and AI in service of humanity; integral leadership and collective transformation",
       banned:
-        "Promesas terapeuticas, afirmaciones medicas no verificadas, citas inventadas",
-      cta: "Explora mas ideas.",
+        "Generic self-help; manifestation language; shallow positivity; scientific claims presented beyond their evidence; sectarian dogma; partisan campaigning; fear-driven ecology; preaching or shaming; anti-entrepreneur or anti-work framing; corporate jargon; doom and us-vs-them rhetoric",
+      cta: "Invite reflection, agency, and an open question; connect the reader to the foundation’s work or the Jardín de la Evolución when relevant.",
       styleExamples: [
-        "La claridad tambien puede ser profunda cuando evita la solemnidad innecesaria.",
+        "Move from a concrete image or scientific observation into a reasoned philosophical chain, then return the insight to the reader’s responsibility and agency.",
+        "Close with serene possibility: Evolucionar es ser. Y lo mejor aún está por venir.",
       ],
-      defaultCtas: [
-        {
-          name: "Explora mas ideas",
-          url: "https://humanismoevolutivo.com",
-        },
-      ],
-      visualStyleDescription: "",
+      defaultCtas: [],
+      visualStyleDescription:
+        "Serene, expansive editorial imagery connecting cosmic evolution, nature, human dignity, conscious work, and the monumental Venetian-mosaic language of the Jardín de la Evolución. Use concrete visual metaphors that make abstract ideas accessible; feel contemplative, humane, intelligent, and hopeful rather than mystical or promotional.",
       visualPalette: "",
-      visualRules: "sin texto en imagenes, sin rostros, estilo fotografico sobrio",
+      visualRules:
+        "Bridge science and spirituality without sectarian symbolism; represent people with dignity and universality; avoid fear-driven ecological imagery, guru or manifestation clichés, corporate stock-photo tropes, partisan symbols, dogmatic religious claims, text-heavy generated images, and doom-oriented compositions.",
     },
   ],
   contextDocs: [
     {
-      id: "doc_herzenco_positioning",
+      id: "context_herzen_voice_guide_2026_07",
       property: "herzenco",
-      title: "Herzen Co. positioning",
-      contentMd:
-        "Herzen Co. helps operators turn content into a practical operating system. Distinctive positioning phrase: operator-grade content infrastructure.",
+      title: "Herzen Co. — Content, Voice & Messaging Guide",
+      contentMd: herzenVoiceGuide,
       source: "written",
       active: true,
       sortOrder: 0,
-      createdAt: "2026-07-14T16:00:00.000Z",
+      createdAt: "2026-07-21T00:00:00.000Z",
     },
     {
-      id: "doc_humanismo_context",
+      id: "context_humanismo_voice_guide_2026_07",
       property: "humanismo-evolutivo",
-      title: "Humanismo Evolutivo context",
-      contentMd:
-        "Humanismo Evolutivo writes about technology through a human lens. Distinctive positioning phrase: tecnologia al servicio de la conciencia.",
+      title: "Humanismo Evolutivo — Content, Tone & Voice Guide",
+      contentMd: humanismoVoiceGuide,
       source: "written",
       active: true,
       sortOrder: 0,
-      createdAt: "2026-07-14T16:05:00.000Z",
+      createdAt: "2026-07-21T00:00:00.000Z",
     },
   ],
-  metrics: [
-    { contentItemId: "ci_seed_review", date: "2026-07-12", pageviews: 18 },
-    { contentItemId: "ci_seed_review", date: "2026-07-13", pageviews: 31 },
-    {
-      contentItemId: "ci_seed_review",
-      date: "2026-07-14",
-      pageviews: 27,
-      gscImpressions: 210,
-      gscClicks: 12,
-      gscAvgPosition: 9.4,
-    },
-    { contentItemId: "ci_seed_scheduled", date: "2026-07-14", pageviews: 0 },
-  ],
+  metrics: [],
   models: [
     {
       id: "model_claude_sonnet",
@@ -585,14 +567,7 @@ const initialState: EngineState = {
   autopilotWarnings: [],
   gscConnected: false,
   cron: "0 9 * * 1,3",
-  apiKeys: [
-    {
-      id: "key_lupe",
-      name: "Lupe local key",
-      scopes: ["content:write", "review:write"],
-      createdAt: "2026-07-13T16:00:00.000Z",
-    },
-  ],
+  apiKeys: [],
 };
 
 const emptyForm: QuickGenerateForm = {
@@ -747,7 +722,7 @@ export function ContentEngineApp({ userEmail }: ContentEngineAppProps) {
     }
   }
 
-  function createContentFromForm(event: FormEvent<HTMLFormElement>) {
+  async function createContentFromForm(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!form.prompt.trim()) {
       setToast("Prompt required");
@@ -790,7 +765,7 @@ export function ContentEngineApp({ userEmail }: ContentEngineAppProps) {
       metaTitle: title.slice(0, 60),
       metaDescription,
       evals: [],
-      body: makeBody(title, form.prompt, property?.language, brandContext, primaryKeyword),
+      body: "",
       contextHash: hashString(brandContext),
       socialMeta: {
         ogTitle: title.slice(0, 60),
@@ -817,7 +792,51 @@ export function ContentEngineApp({ userEmail }: ContentEngineAppProps) {
       generateHeroImage: Boolean(property?.imagesEnabled),
     });
     setToast("Draft job started");
-    finishPipeline(item, form.skipAutoPublish);
+
+    const draftModel = resolveServedModel(state, {
+      task: "draft",
+      property: form.property,
+      contentType: form.contentType,
+      language: property?.language ?? "English",
+    });
+
+    try {
+      const response = await fetch("/api/ai/generate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          provider: draftModel.provider,
+          model: draftModel.modelId,
+          maxOutputTokens: 8_000,
+          instructions: buildArticleInstructions(property?.language ?? "English"),
+          prompt: buildArticlePrompt({
+            title,
+            request: form.prompt.trim(),
+            keywords,
+            toneOverride: form.toneOverride.trim(),
+            brandContext,
+          }),
+        }),
+      });
+      const payload = (await response.json()) as {
+        data?: { text?: string; model?: string; provider?: string };
+        message?: string;
+      };
+      if (!response.ok || !payload.data?.text) {
+        throw new Error(payload.message || "The provider returned no article.");
+      }
+
+      const generatedItem = { ...item, body: payload.data.text };
+      setContentItem(id, { body: payload.data.text });
+      setToast(`Draft received from ${payload.data.model ?? draftModel.displayName}`);
+      finishPipeline(generatedItem, form.skipAutoPublish);
+    } catch (error) {
+      setContentItem(id, {
+        status: "failed",
+        body: "",
+      });
+      setToast(error instanceof Error ? error.message : "Draft generation failed");
+    }
   }
 
   function approveContent(id: string) {
@@ -1121,7 +1140,7 @@ export function ContentEngineApp({ userEmail }: ContentEngineAppProps) {
   function resetWorkspace() {
     setState(initialState);
     setSelectedContentId(initialState.content[0]?.id ?? "");
-    setToast("Demo data restored");
+    setToast("Workspace cleared");
   }
 
   async function signOut() {
@@ -1131,16 +1150,16 @@ export function ContentEngineApp({ userEmail }: ContentEngineAppProps) {
   }
 
   return (
-    <main className="min-h-screen bg-[#0d0f12] text-[#eef1f0]">
+    <main className="herzen-engine min-h-screen">
       <div className="grid min-h-screen lg:grid-cols-[256px_1fr]">
-        <aside className="border-r border-white/10 bg-[#111418] px-4 py-5">
+        <aside className="engine-sidebar border-r px-4 py-6">
           <div className="flex items-center gap-3 px-2">
-            <div className="flex h-10 w-10 items-center justify-center border border-emerald-300/40 bg-emerald-300/10 text-emerald-200">
-              <Sparkles size={19} />
+            <div className="flex h-10 w-10 items-center justify-center border border-[var(--border-on-dark)] text-sm font-medium text-[var(--paper-50)]">
+              H
             </div>
             <div>
-              <p className="text-sm font-semibold">Herzen Engine</p>
-              <p className="font-mono text-xs text-white/45">local operator</p>
+              <p className="editorial-wordmark text-xs">Herzen Co.</p>
+              <p className="mt-1 text-xs text-[var(--text-on-dark-muted)]">Content engine</p>
             </div>
           </div>
 
@@ -1149,8 +1168,8 @@ export function ContentEngineApp({ userEmail }: ContentEngineAppProps) {
               <button
                 className={`flex w-full items-center gap-3 border px-3 py-2.5 text-left text-sm transition ${
                   activeView === item.view
-                    ? "border-emerald-300/35 bg-emerald-300/10 text-emerald-100"
-                    : "border-transparent text-white/65 hover:border-white/10 hover:bg-white/[0.04] hover:text-white"
+                    ? "border-[var(--clay-400)] bg-[rgba(156,92,62,0.18)] text-[var(--paper-50)]"
+                    : "border-transparent text-[var(--text-on-dark-muted)] hover:border-[var(--border-on-dark)] hover:text-[var(--paper-50)]"
                 }`}
                 key={item.view}
                 onClick={() => setActiveView(item.view)}
@@ -1169,8 +1188,8 @@ export function ContentEngineApp({ userEmail }: ContentEngineAppProps) {
             <button
               className={`flex w-full items-center gap-3 border px-3 py-2.5 text-left text-sm transition ${
                 activeView === "settings"
-                  ? "border-emerald-300/35 bg-emerald-300/10 text-emerald-100"
-                  : "border-transparent text-white/55 hover:border-white/10 hover:bg-white/[0.04] hover:text-white"
+                  ? "border-[var(--clay-400)] bg-[rgba(156,92,62,0.18)] text-[var(--paper-50)]"
+                  : "border-transparent text-[var(--text-on-dark-muted)] hover:border-[var(--border-on-dark)] hover:text-[var(--paper-50)]"
               }`}
               onClick={() => setActiveView("settings")}
               type="button"
@@ -1180,40 +1199,40 @@ export function ContentEngineApp({ userEmail }: ContentEngineAppProps) {
             </button>
           </div>
 
-          <div className="mt-4 border border-white/10 bg-white/[0.03] p-3">
-            <div className="flex items-center gap-2 text-sm text-white/70">
+          <div className="mt-4 border border-[var(--border-on-dark)] p-3">
+            <div className="flex items-center gap-2 text-sm text-[var(--text-on-dark-muted)]">
               <Activity size={16} />
               {toast}
             </div>
           </div>
         </aside>
 
-        <section className="min-w-0">
-          <header className="flex flex-col gap-4 border-b border-white/10 bg-[#15191e] px-5 py-4 xl:flex-row xl:items-center xl:justify-between">
+        <section className="engine-workspace min-w-0">
+          <header className="engine-header sticky top-0 z-20 flex flex-col gap-4 border-b px-6 py-5 xl:flex-row xl:items-center xl:justify-between">
             <div>
-              <p className="font-mono text-xs uppercase tracking-wide text-white/45">
+              <p className="editorial-eyebrow">
                 {activeViewLabel(activeView)}
               </p>
-              <h1 className="mt-1 text-2xl font-semibold text-white">
+              <h1 className="editorial-title mt-1 text-3xl text-[var(--text-primary)]">
                 {viewTitle(activeView)}
               </h1>
             </div>
             <div className="flex flex-wrap items-center gap-2">
-              <div className="hidden items-center gap-2 border border-white/10 bg-white/[0.03] px-3 py-2 text-sm text-white/55 md:flex">
+              <div className="hidden items-center gap-2 border border-[var(--border-hairline)] bg-[var(--surface-card)] px-3 py-2 text-sm text-[var(--text-secondary)] md:flex">
                 <KeyRound size={15} />
                 <span className="max-w-52 truncate">{userEmail}</span>
               </div>
-              <label className="flex min-w-0 items-center gap-2 border border-white/10 bg-[#0d0f12] px-3 py-2 text-sm text-white/60">
+              <label className="flex min-w-0 items-center gap-2 border border-[var(--border-soft)] bg-[var(--surface-card)] px-3 py-2 text-sm text-[var(--text-secondary)]">
                 <Search size={16} />
                 <input
-                  className="w-48 bg-transparent text-white outline-none placeholder:text-white/35"
+                  className="w-48 bg-transparent text-[var(--text-primary)] outline-none placeholder:text-[var(--text-muted)]"
                   onChange={(event) => setQuery(event.target.value)}
                   placeholder="Search content"
                   value={query}
                 />
               </label>
               <button
-                className="inline-flex items-center gap-2 border border-emerald-300/35 bg-emerald-300/10 px-3 py-2 text-sm text-emerald-100 hover:bg-emerald-300/15"
+                className="inline-flex items-center gap-2 rounded-[var(--radius-sm)] border border-[var(--surface-ink)] bg-[var(--surface-ink)] px-4 py-2 text-xs font-medium uppercase tracking-[var(--tracking-wide)] text-[var(--text-on-dark)] hover:bg-[var(--ink-700)]"
                 onClick={() => setActiveView("home")}
                 type="button"
               >
@@ -1221,7 +1240,7 @@ export function ContentEngineApp({ userEmail }: ContentEngineAppProps) {
                 New
               </button>
               <button
-                className="inline-flex items-center gap-2 border border-white/10 bg-white/[0.03] px-3 py-2 text-sm text-white/60 hover:bg-white/[0.06] hover:text-white"
+                className="inline-flex items-center gap-2 rounded-[var(--radius-sm)] border border-[var(--border-strong)] px-4 py-2 text-xs font-medium uppercase tracking-[var(--tracking-wide)] text-[var(--text-primary)] hover:bg-[var(--surface-raised)]"
                 onClick={signOut}
                 type="button"
               >
@@ -1231,7 +1250,7 @@ export function ContentEngineApp({ userEmail }: ContentEngineAppProps) {
             </div>
           </header>
 
-          <div className="p-5">
+          <div className="engine-content p-6 xl:p-8">
             {activeView === "home" && (
               <HomeView
                 autopilotWarnings={state.autopilotWarnings}
@@ -3994,7 +4013,7 @@ function SettingsView({
       <Panel title="Workspace">
         <ActionButton
           icon={<RotateCcw size={16} />}
-          label="Reset demo data"
+          label="Clear workspace data"
           onClick={onReset}
           tone="red"
         />
@@ -4221,10 +4240,10 @@ function Panel({
   title?: string;
 }) {
   return (
-    <section className="border border-white/10 bg-[#15191e] p-4">
+    <section className="rounded-[var(--radius-md)] border border-[var(--border-hairline)] bg-[var(--surface-card)] p-6 shadow-[var(--shadow-sm)]">
       {title && (
-        <h2 className="mb-4 flex items-center gap-2 text-sm font-semibold uppercase tracking-wide text-white/60">
-          <PanelLeft size={15} />
+        <h2 className="editorial-eyebrow mb-5 flex items-center gap-2">
+          <span className="h-1.5 w-1.5 rotate-45 bg-[var(--clay-500)]" aria-hidden="true" />
           {title}
         </h2>
       )}
@@ -4236,7 +4255,7 @@ function Panel({
 function Field({ children, label }: { children: ReactNode; label: string }) {
   return (
     <label className="block">
-      <span className="mb-2 block font-mono text-xs uppercase tracking-wide text-white/45">
+      <span className="editorial-eyebrow mb-2 block">
         {label}
       </span>
       {children}
@@ -4256,13 +4275,13 @@ function ActionButton({
   tone: "green" | "cyan" | "red";
 }) {
   const toneClass = {
-    green: "border-emerald-300/35 bg-emerald-300/10 text-emerald-100 hover:bg-emerald-300/15",
-    cyan: "border-cyan-300/35 bg-cyan-300/10 text-cyan-100 hover:bg-cyan-300/15",
-    red: "border-red-300/35 bg-red-300/10 text-red-100 hover:bg-red-300/15",
+    green: "border-[var(--surface-ink)] bg-[var(--surface-ink)] text-[var(--text-on-dark)] hover:bg-[var(--ink-700)]",
+    cyan: "border-[var(--clay-500)] bg-[var(--clay-500)] text-[var(--white-0)] hover:bg-[var(--clay-600)]",
+    red: "border-[var(--clay-500)] bg-transparent text-[var(--clay-600)] hover:bg-[rgba(156,92,62,0.08)]",
   }[tone];
   return (
     <button
-      className={`inline-flex items-center justify-center gap-2 border px-3 py-2 text-sm ${toneClass}`}
+      className={`inline-flex items-center justify-center gap-2 rounded-[var(--radius-sm)] border px-4 py-2.5 text-xs font-medium uppercase tracking-[var(--tracking-wide)] ${toneClass}`}
       onClick={onClick}
       type="button"
     >
@@ -4274,7 +4293,7 @@ function ActionButton({
 
 function EmptyState({ icon, label }: { icon: ReactNode; label: string }) {
   return (
-    <div className="flex min-h-32 items-center justify-center border border-dashed border-white/15 bg-white/[0.02] text-white/45">
+    <div className="flex min-h-32 items-center justify-center border border-dashed border-[var(--border-soft)] bg-[var(--surface-sunken)] text-[var(--text-muted)]">
       <div className="flex items-center gap-2 text-sm">
         {icon}
         {label}
@@ -4285,9 +4304,9 @@ function EmptyState({ icon, label }: { icon: ReactNode; label: string }) {
 
 function MiniStat({ label, value }: { label: string; value: string }) {
   return (
-    <div className="border border-white/10 bg-white/[0.025] p-3">
-      <p className="font-mono text-xs uppercase text-white/40">{label}</p>
-      <p className="mt-2 line-clamp-2 text-sm text-white/75">{value || "-"}</p>
+    <div className="border border-[var(--border-hairline)] bg-[var(--surface-card)] p-4">
+      <p className="editorial-eyebrow">{label}</p>
+      <p className="mt-2 line-clamp-2 text-sm text-[var(--text-primary)]">{value || "-"}</p>
     </div>
   );
 }
@@ -4298,7 +4317,7 @@ function Sparkline({ values }: { values: number[] }) {
     <div className="mt-3 flex h-8 items-end gap-1">
       {values.map((value, index) => (
         <span
-          className="flex-1 bg-emerald-300/70"
+          className="flex-1 bg-[var(--clay-400)]"
           key={`${value}-${index}`}
           style={{ height: `${Math.max(4, (value / max) * 32)}px` }}
         />
@@ -4329,28 +4348,28 @@ function Badge({
   tone: "green" | "cyan" | "amber" | "red" | "gray";
 }) {
   const toneClass = {
-    green: "border-emerald-300/30 bg-emerald-300/10 text-emerald-100",
-    cyan: "border-cyan-300/30 bg-cyan-300/10 text-cyan-100",
-    amber: "border-amber-300/30 bg-amber-300/10 text-amber-100",
-    red: "border-red-300/30 bg-red-300/10 text-red-100",
-    gray: "border-white/15 bg-white/[0.04] text-white/60",
+    green: "border-[var(--border-soft)] bg-[var(--surface-raised)] text-[var(--ink-700)]",
+    cyan: "border-[var(--clay-400)] bg-transparent text-[var(--clay-600)]",
+    amber: "border-[var(--sand-200)] bg-[var(--surface-sunken)] text-[var(--ink-700)]",
+    red: "border-[var(--clay-400)] bg-[rgba(156,92,62,0.08)] text-[var(--clay-600)]",
+    gray: "border-[var(--border-soft)] bg-transparent text-[var(--text-secondary)]",
   }[tone];
   return (
-    <span className={`inline-flex items-center border px-2 py-1 font-mono text-xs ${toneClass}`}>
+    <span className={`inline-flex items-center rounded-[var(--radius-pill)] border px-3 py-1 text-xs ${toneClass}`}>
       {children}
     </span>
   );
 }
 
 function Score({ value }: { value: number | null }) {
-  if (value === null) return <span className="font-mono text-xs text-white/35">-</span>;
+  if (value === null) return <span className="text-xs text-[var(--text-muted)]">-</span>;
   const color =
-    value >= 80 ? "text-emerald-200" : value >= 70 ? "text-amber-200" : "text-red-200";
-  return <span className={`font-mono text-xs ${color}`}>{value}</span>;
+    value >= 80 ? "text-[var(--ink-700)]" : value >= 70 ? "text-[var(--clay-500)]" : "text-[var(--clay-600)]";
+  return <span className={`text-xs font-medium ${color}`}>{value}</span>;
 }
 
 const fieldClass =
-  "w-full border border-white/10 bg-[#0d0f12] px-3 py-2.5 text-sm text-white outline-none transition placeholder:text-white/25 focus:border-emerald-300/45";
+  "w-full rounded-[var(--radius-sm)] border border-[var(--border-soft)] bg-[var(--surface-card)] px-3 py-2.5 text-sm text-[var(--text-primary)] outline-none transition placeholder:text-[var(--text-muted)] focus:border-[var(--clay-500)] focus:ring-2 focus:ring-[var(--focus-ring)]";
 
 function mergeById<T extends { id: string }>(saved: T[], seeded: T[]) {
   const savedIds = new Set(saved.map((entry) => entry.id));
@@ -4366,17 +4385,21 @@ function normalizeState(saved: Partial<EngineState>): EngineState {
     const seedBrand = initialState.brands.find((brand) => brand.property === property.slug);
     return {
       property: property.slug,
-      voice: savedBrand?.voice ?? seedBrand?.voice ?? "",
-      audience: savedBrand?.audience ?? seedBrand?.audience ?? "",
-      pillars: savedBrand?.pillars ?? seedBrand?.pillars ?? "",
-      banned: savedBrand?.banned ?? seedBrand?.banned ?? "",
-      cta: savedBrand?.cta ?? seedBrand?.cta ?? "",
-      styleExamples: savedBrand?.styleExamples ?? seedBrand?.styleExamples ?? [],
-      defaultCtas: savedBrand?.defaultCtas ?? seedBrand?.defaultCtas ?? [],
+      voice: savedBrand?.voice?.trim() || seedBrand?.voice || "",
+      audience: savedBrand?.audience?.trim() || seedBrand?.audience || "",
+      pillars: savedBrand?.pillars?.trim() || seedBrand?.pillars || "",
+      banned: savedBrand?.banned?.trim() || seedBrand?.banned || "",
+      cta: savedBrand?.cta?.trim() || seedBrand?.cta || "",
+      styleExamples: savedBrand?.styleExamples?.length
+        ? savedBrand.styleExamples
+        : seedBrand?.styleExamples ?? [],
+      defaultCtas: savedBrand?.defaultCtas?.length
+        ? savedBrand.defaultCtas
+        : seedBrand?.defaultCtas ?? [],
       visualStyleDescription:
-        savedBrand?.visualStyleDescription ?? seedBrand?.visualStyleDescription ?? "",
-      visualPalette: savedBrand?.visualPalette ?? seedBrand?.visualPalette ?? "",
-      visualRules: savedBrand?.visualRules ?? seedBrand?.visualRules ?? "",
+        savedBrand?.visualStyleDescription?.trim() || seedBrand?.visualStyleDescription || "",
+      visualPalette: savedBrand?.visualPalette?.trim() || seedBrand?.visualPalette || "",
+      visualRules: savedBrand?.visualRules?.trim() || seedBrand?.visualRules || "",
     };
   });
 
@@ -4390,7 +4413,7 @@ function normalizeState(saved: Partial<EngineState>): EngineState {
     })),
     topics: saved.topics ?? initialState.topics,
     brands,
-    contextDocs: saved.contextDocs ?? initialState.contextDocs,
+    contextDocs: mergeById(saved.contextDocs ?? [], initialState.contextDocs),
     metrics: saved.metrics ?? initialState.metrics,
     models: mergeById(saved.models ?? [], initialState.models),
     routingRules: mergeById(
@@ -4879,6 +4902,41 @@ function makeMetaDescription(excerpt: string, primaryKeyword: string, language =
   if (combined.length >= 120 && combined.length <= 155) return combined;
   if (combined.length > 155) return combined.slice(0, 152).trimEnd() + "...";
   return `${combined} ${language === "Spanish" ? "Incluye una respuesta directa, estructura FAQ y recomendaciones accionables." : "Includes a direct answer, FAQ structure, and actionable recommendations."}`.slice(0, 155);
+}
+
+function buildArticleInstructions(language: string) {
+  return [
+    "You are the production writer for the Herzen Content Engine.",
+    `Write in ${language}.`,
+    "Return only the complete article in Markdown, beginning with one H1 heading.",
+    "Use an answer-first opening, clear H2 sections, practical recommendations, and a useful FAQ section.",
+    "Stay faithful to the supplied brand context and never invent claims, credentials, statistics, or sources.",
+    "Avoid generic AI phrasing, exaggerated promises, and commentary about the writing process.",
+  ].join("\n");
+}
+
+function buildArticlePrompt({
+  title,
+  request,
+  keywords,
+  toneOverride,
+  brandContext,
+}: {
+  title: string;
+  request: string;
+  keywords: string[];
+  toneOverride: string;
+  brandContext: string;
+}) {
+  return [
+    `TITLE: ${title}`,
+    `EDITORIAL REQUEST: ${request}`,
+    `SEO KEYWORDS: ${keywords.join(", ") || "none supplied"}`,
+    `TONE OVERRIDE: ${toneOverride || "use the brand voice"}`,
+    "",
+    "BRAND CONTEXT:",
+    brandContext,
+  ].join("\n");
 }
 
 function extractContextPhrase(context: string) {

@@ -25,6 +25,7 @@
 .DS_Store
 *.pem
 .Codex/backups/
+.Codex/work-journal/
 
 # debug
 npm-debug.log*

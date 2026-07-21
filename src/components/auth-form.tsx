@@ -1,7 +1,7 @@
 "use client";
 
 import { FormEvent, useState } from "react";
-import { KeyRound, Loader2, LockKeyhole, Mail, Sparkles } from "lucide-react";
+import { KeyRound, Loader2, LockKeyhole, Mail } from "lucide-react";
 import { createClient } from "@/utils/supabase/client";
 
 interface AuthFormProps {
@@ -67,48 +67,48 @@ export function AuthForm({ allowedDomain }: AuthFormProps) {
   }
 
   return (
-    <main className="min-h-screen bg-[#0d0f12] px-5 py-8 text-[#eef1f0]">
+    <main className="min-h-screen bg-[var(--color-paper)] px-5 py-8 text-[var(--color-ink)]">
       <section className="mx-auto grid min-h-[calc(100vh-4rem)] max-w-6xl items-center gap-8 lg:grid-cols-[1fr_440px]">
         <div className="max-w-2xl">
-          <div className="inline-flex items-center gap-2 border border-emerald-300/30 bg-emerald-300/10 px-3 py-2 text-sm text-emerald-100">
-            <Sparkles size={16} />
-            Herzen Content Engine
+          <div className="editorial-eyebrow inline-flex items-center gap-2 border border-[var(--color-clay)]/30 bg-[var(--color-clay)]/8 px-3 py-2 text-[var(--color-clay)]">
+            <span className="h-1.5 w-1.5 rotate-45 bg-current" aria-hidden="true" />
+            Herzen Co. · Content engine
           </div>
-          <h1 className="mt-6 text-4xl font-semibold tracking-normal text-white md:text-5xl">
+          <h1 className="editorial-title mt-6 text-5xl leading-[1.02] md:text-7xl">
             Private operator access
           </h1>
-          <p className="mt-5 max-w-xl text-base leading-7 text-white/60">
+          <p className="mt-5 max-w-xl text-base leading-7 text-[var(--color-text-secondary)]">
             Sign in with a Herzen Co. email and password to manage content,
             properties, review workflows, model routing, and performance.
           </p>
         </div>
 
         <form
-          className="border border-white/10 bg-[#15191e] p-5 shadow-2xl shadow-black/20"
+          className="border border-[var(--color-border)] bg-[var(--color-card)] p-6 shadow-[var(--shadow-card)]"
           onSubmit={handleSubmit}
         >
           <div className="flex items-start justify-between gap-4">
             <div>
-              <p className="font-mono text-xs uppercase text-white/40">
+              <p className="editorial-eyebrow">
                 {mode === "sign-in" ? "Sign in" : "Create account"}
               </p>
-              <h2 className="mt-2 text-2xl font-semibold text-white">
+              <h2 className="editorial-title mt-2 text-3xl">
                 {mode === "sign-in" ? "Welcome back" : "Join the workspace"}
               </h2>
             </div>
-            <div className="flex h-10 w-10 items-center justify-center border border-emerald-300/35 bg-emerald-300/10 text-emerald-100">
+            <div className="flex h-10 w-10 items-center justify-center border border-[var(--color-clay)]/35 bg-[var(--color-clay)]/8 text-[var(--color-clay)]">
               <KeyRound size={18} />
             </div>
           </div>
 
           <div className="mt-6 space-y-4">
             <label className="block">
-              <span className="font-mono text-xs uppercase text-white/45">Email</span>
-              <span className="mt-2 flex items-center gap-2 border border-white/10 bg-[#0d0f12] px-3 py-3">
-                <Mail size={16} className="text-white/45" />
+              <span className="editorial-eyebrow">Email</span>
+              <span className="mt-2 flex items-center gap-2 border border-[var(--color-border)] bg-[var(--color-paper)] px-3 py-3 focus-within:border-[var(--color-clay)] focus-within:ring-2 focus-within:ring-[var(--color-clay)]/15">
+                <Mail size={16} className="text-[var(--color-text-muted)]" />
                 <input
                   autoComplete="email"
-                  className="w-full bg-transparent text-sm text-white outline-none placeholder:text-white/30"
+                  className="w-full bg-transparent text-sm text-[var(--color-ink)] outline-none placeholder:text-[var(--color-text-muted)]"
                   inputMode="email"
                   onChange={(event) => setEmail(event.target.value)}
                   placeholder={`name@${allowedDomain}`}
@@ -119,12 +119,12 @@ export function AuthForm({ allowedDomain }: AuthFormProps) {
             </label>
 
             <label className="block">
-              <span className="font-mono text-xs uppercase text-white/45">Password</span>
-              <span className="mt-2 flex items-center gap-2 border border-white/10 bg-[#0d0f12] px-3 py-3">
-                <LockKeyhole size={16} className="text-white/45" />
+              <span className="editorial-eyebrow">Password</span>
+              <span className="mt-2 flex items-center gap-2 border border-[var(--color-border)] bg-[var(--color-paper)] px-3 py-3 focus-within:border-[var(--color-clay)] focus-within:ring-2 focus-within:ring-[var(--color-clay)]/15">
+                <LockKeyhole size={16} className="text-[var(--color-text-muted)]" />
                 <input
                   autoComplete={mode === "sign-in" ? "current-password" : "new-password"}
-                  className="w-full bg-transparent text-sm text-white outline-none placeholder:text-white/30"
+                  className="w-full bg-transparent text-sm text-[var(--color-ink)] outline-none placeholder:text-[var(--color-text-muted)]"
                   minLength={6}
                   onChange={(event) => setPassword(event.target.value)}
                   placeholder="Password"
@@ -136,13 +136,13 @@ export function AuthForm({ allowedDomain }: AuthFormProps) {
           </div>
 
           {message && (
-            <p className="mt-4 border border-white/10 bg-white/[0.03] px-3 py-2 text-sm text-white/65">
+            <p className="mt-4 border border-[var(--color-border)] bg-[var(--color-surface-sunken)] px-3 py-2 text-sm text-[var(--color-text-secondary)]">
               {message}
             </p>
           )}
 
           <button
-            className="mt-5 inline-flex w-full items-center justify-center gap-2 bg-emerald-300 px-4 py-3 text-sm font-semibold text-[#08110e] hover:bg-emerald-200 disabled:cursor-not-allowed disabled:opacity-60"
+            className="mt-5 inline-flex w-full items-center justify-center gap-2 bg-[var(--color-ink)] px-4 py-3 text-xs font-semibold uppercase tracking-[0.12em] text-[var(--color-paper)] transition-colors hover:bg-[var(--color-clay)] disabled:cursor-not-allowed disabled:opacity-60"
             disabled={isSubmitting}
             type="submit"
           >
@@ -151,7 +151,7 @@ export function AuthForm({ allowedDomain }: AuthFormProps) {
           </button>
 
           <button
-            className="mt-4 w-full text-center text-sm text-white/55 hover:text-white"
+            className="mt-4 w-full text-center text-sm text-[var(--color-text-secondary)] transition-colors hover:text-[var(--color-clay)]"
             onClick={() => {
               setMode(mode === "sign-in" ? "create" : "sign-in");
               setMessage("");
