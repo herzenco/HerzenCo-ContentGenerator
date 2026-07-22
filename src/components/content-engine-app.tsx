@@ -5239,18 +5239,22 @@ function applyGeneratedContent(
   titleWasFixed: boolean,
   language: PropertyConfig["language"],
 ): ContentItem {
-  const extractedTitle = extractGeneratedTitle(generatedText, item.contentType);
+  const publishableText =
+    item.contentType === "social_post"
+      ? sanitizeSocialOutput(generatedText)
+      : generatedText.trim();
+  const extractedTitle = extractGeneratedTitle(publishableText, item.contentType);
   const title = titleWasFixed
     ? item.title
-    : extractedTitle || makeFallbackGeneratedTitle(generatedText, item.contentType, language);
-  const excerpt = extractGeneratedExcerpt(generatedText, item.contentType, language);
+    : extractedTitle || makeFallbackGeneratedTitle(publishableText, item.contentType, language);
+  const excerpt = extractGeneratedExcerpt(publishableText, item.contentType, language);
   const primaryKeyword = item.keywords[0] ?? title.split(/\s+/).slice(0, 3).join(" ");
   const metaDescription = makeGeneratedMetaDescription(excerpt, primaryKeyword, language);
 
   return {
     ...item,
     title,
-    body: generatedText.trim(),
+    body: publishableText,
     excerpt,
     metaTitle: title.slice(0, 60),
     metaDescription,
@@ -5261,6 +5265,14 @@ function applyGeneratedContent(
       ...(item.socialMeta?.ogImage ? { ogImage: item.socialMeta.ogImage } : {}),
     },
   };
+}
+
+function sanitizeSocialOutput(text: string) {
+  return text
+    .trim()
+    .replace(/\s*—\s*([a-z])/g, (_match, letter: string) => `. ${letter.toUpperCase()}`)
+    .replace(/\s*—\s*/g, ". ")
+    .replace(/\.\s*\./g, ".");
 }
 
 function extractGeneratedTitle(text: string, contentType: ContentItem["contentType"]) {
@@ -5663,7 +5675,7 @@ function buildSocialPostEvals({
   const hashtagCount = draftSection.match(/(?:^|\s)#[\p{L}\p{N}_]+/gu)?.length ?? 0;
   const hasForbiddenFormatting = /\p{Extended_Pictographic}/u.test(draftSection) || draftSection.includes("—") || hashtagCount > 3;
   const mentionsRetiredBrand = /\b(?:xyren|xelerate)\b/i.test(body);
-  const speaksToFounder = /\b(founder|your team|you|your)\b/i.test(draftSection);
+  const speaksToFounder = /\b(founders?|your team|you|your)\b/i.test(draftSection);
   const executionSpecific = /\b(execution|ship|shipping|stakeholder|engineering|developer|priority|priorities|owner|ownership|progress)\b/i.test(draftSection);
   const openingWords = draftSection.split(/\s+/).slice(0, 50).join(" ");
   const hasConcreteOpening = /\b(?:monday|tuesday|wednesday|thursday|friday|midweek|slack|standup|meeting|release|deadline|ticket|requirement|approval|decision|engineer|developer|priority|priorities|update|waiting|chasing|clarifying|answering|blocked|slipped|moved)\b/i.test(openingWords);
