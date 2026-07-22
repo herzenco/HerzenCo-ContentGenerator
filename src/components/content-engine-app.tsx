@@ -5259,6 +5259,11 @@ function extractGeneratedTitle(text: string, contentType: ContentItem["contentTy
     return cleanGeneratedTitle(text.match(/^#\s+(.+)$/m)?.[1] ?? "");
   }
 
+  const boldInlineTitle =
+    text.match(/\*\*Title:\*\*\s*([\s\S]*?)(?=\s+(?:---\s*)?\*\*Recommended format(?::\*\*|\*\*:)|\n|$)/i)?.[1] ??
+    text.match(/\*\*Title\*\*\s*:\s*([\s\S]*?)(?=\s+(?:---\s*)?\*\*Recommended format(?::\*\*|\*\*:)|\n|$)/i)?.[1];
+  if (boldInlineTitle) return cleanGeneratedTitle(boldInlineTitle);
+
   const inlineTitle = text.match(/^\s*(?:#{1,3}\s*)?(?:\*\*)?Title(?:\*\*)?\s*:\s*(.+)$/im)?.[1];
   if (inlineTitle) return cleanGeneratedTitle(inlineTitle);
 
@@ -5320,6 +5325,15 @@ function extractGeneratedExcerpt(
 }
 
 function extractLinkedInDraft(text: string) {
+  const boldSection =
+    text.match(
+      /\*\*LinkedIn post draft:\*\*\s*([\s\S]*?)(?=\s*(?:---\s*)?\*\*(?:Primary pain angle|Why this angle should resonate|Suggested CTA)(?::\*\*|\*\*:))/i,
+    )?.[1] ??
+    text.match(
+      /\*\*LinkedIn post draft\*\*\s*:\s*([\s\S]*?)(?=\s*(?:---\s*)?\*\*(?:Primary pain angle|Why this angle should resonate|Suggested CTA)(?::\*\*|\*\*:))/i,
+    )?.[1];
+  if (boldSection) return boldSection.trim().replace(/\s*---\s*$/, "").trim();
+
   return text.match(
     /(?:^|\n)(?:#{1,3}\s*)?(?:\*\*)?LinkedIn post draft(?:\*\*)?\s*:?[ \t]*\n([\s\S]*?)(?=\n(?:#{1,3}\s*)?(?:\*\*)?(?:Primary pain angle|Why this angle should resonate|Suggested CTA)(?:\*\*)?\s*:?[ \t]*(?:\n|$)|$)/i,
   )?.[1]?.trim() ?? text;
