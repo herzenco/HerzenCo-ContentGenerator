@@ -338,12 +338,24 @@ Open with a real, specific founder problem. Clarify why it happens. Diagnose or 
 
 Vary posts across pain and diagnosis, execution lessons, founder reframes, operating principles, team dysfunction observations, and practical how-we-think posts. Test angles and iterate from performance rather than treating one message as permanently correct.
 
+## Format mix and creative direction
+Use this target mix across batches and the content calendar:
+- Carousels or document posts: approximately 45%. This is the primary format for saves and dwell time. Use a real hook on slide one, one idea per slide, a coherent progression, and a clear takeaway or question at the end.
+- Image posts with strong copy: approximately 30%. Use a custom, relevant image concept and let the written post carry a specific operator insight. Avoid decorative stock-style concepts.
+- Polls: approximately 10%. Ask genuine, open-ended questions that surface how founders and teams actually operate. Never use engagement bait or false binary choices.
+- Text-only thought leadership: approximately 15%. Use a sharp first line, short skimmable paragraphs, and one practical point.
+
+Video and LinkedIn Live are out of scope. Carousels and image posts carry the keep-people-on-platform work, so prioritize their creative quality. Prioritize launching a LinkedIn Page newsletter because each issue can notify subscribers and works entirely through text and images.
+
+## Publishing and engagement
+Target 3–5 posts per week, with Tuesday through Thursday mornings as the preferred starting window. Employee advocacy is the strongest distribution lever. Comments matter more than likes, so end with a useful question when it fits and reply to substantive comments within the first hour. Put external links in the first comment rather than the post body. Use zero hashtags by default and no more than three when they are genuinely useful or explicitly requested.
+
 ## Voice
 Conversational, confident, human, practical, lightly opinionated, credible, direct, and useful. Sound hands-dirty and embedded in the work. Use mostly “we,” while allowing “I” when it adds ownership, conviction, or credibility. Make it implicitly clear that Herzen personally leads the work. Prefer plain language to jargon and practical specificity to abstraction.
 
 ## Hard constraints
 - No emojis.
-- No hashtags unless explicitly requested.
+- Default to no hashtags; use no more than three when strategically useful or explicitly requested.
 - No em dashes.
 - No cheesy hooks, fake storytelling, fluff, or vague inspiration.
 - No “hot take” framing unless genuinely earned.
@@ -355,12 +367,14 @@ Conversational, confident, human, practical, lightly opinionated, credible, dire
 - Keep paragraphs readable and natural.
 
 ## Output contract
-Default to one 150–300 word LinkedIn post unless the request asks for a batch or another length. For each post provide:
+Default to one 150–300 word LinkedIn post unless the request asks for a batch or another length. Choose formats according to the target mix. For each post provide:
 1. Title
-2. LinkedIn post draft
-3. Primary pain angle
-4. Why this angle should resonate
-5. Suggested CTA, if any
+2. Recommended format
+3. Format-specific creative brief (carousel slide outline, image concept, poll options, or text structure)
+4. LinkedIn post draft
+5. Primary pain angle
+6. Why this angle should resonate
+7. Suggested CTA, if any
 
 Do not merely restate this guide. Produce native, sharp, publishable LinkedIn writing. When given several topics, create one distinct post per topic. For a batch, vary the pain angles. During revisions, preserve this strategy and voice.`;
 
@@ -501,7 +515,7 @@ const initialState: EngineState = {
       pillars:
         "Teams shipping chaos instead of progress; stakeholder and developer drift; missing ownership of digital work; shifting priorities; founders acting as translator and execution glue; output without business progress; execution problems misdiagnosed as developer problems; embedded project management; fractional product leadership; product strategy and execution",
       banned:
-        "Xyren or Xelerate; emojis; hashtags unless requested; em dashes; cheesy hooks; fake stories; unsupported claims, metrics, credentials, or client outcomes; hot-take framing without substance; corporate language; consultant tone; dev-shop positioning; generic productivity advice; fluff; excessive formatting; leading with website, build, or development work",
+        "Xyren or Xelerate; emojis; more than three hashtags or decorative hashtag stuffing; em dashes; cheesy hooks; fake stories; unsupported claims, metrics, credentials, or client outcomes; hot-take framing without substance; corporate language; consultant tone; dev-shop positioning; generic productivity advice; fluff; excessive formatting; leading with website, build, or development work; video or LinkedIn Live",
       cta:
         "Use no CTA when the insight lands cleanly. When useful, end with a low-pressure founder-facing question or an invitation to compare how execution ownership works inside their team. Never force a sales pitch.",
       styleExamples: [
@@ -4619,6 +4633,14 @@ function mergeById<T extends { id: string }>(saved: T[], seeded: T[]) {
   return [...saved, ...seeded.filter((entry) => !savedIds.has(entry.id))];
 }
 
+function mergeContextDocs(saved: BrandContextDoc[], seeded: BrandContextDoc[]) {
+  const managedIds = new Set(["context_herzen_social_strategy_2026_07_22"]);
+  return mergeById(
+    saved.filter((doc) => !managedIds.has(doc.id)),
+    seeded,
+  );
+}
+
 function normalizeState(saved: Partial<EngineState>): EngineState {
   const savedProperties = saved.properties ?? [];
   const savedPropertySlugs = new Set(savedProperties.map((property) => property.slug));
@@ -4659,7 +4681,7 @@ function normalizeState(saved: Partial<EngineState>): EngineState {
     })),
     topics: saved.topics ?? initialState.topics,
     brands,
-    contextDocs: mergeById(saved.contextDocs ?? [], initialState.contextDocs),
+    contextDocs: mergeContextDocs(saved.contextDocs ?? [], initialState.contextDocs),
     metrics: saved.metrics ?? initialState.metrics,
     models: mergeById(saved.models ?? [], initialState.models),
     routingRules: mergeById(
@@ -5164,10 +5186,12 @@ function buildContentInstructions(
       "Write directly to founders. Lead with a specific execution problem, diagnose why it happens, offer a practical fix or reframe, and end cleanly.",
       "Sound like an embedded operator who owns execution, not a consultant, dev shop, or productivity creator.",
       "Use mostly we. Use I only when it adds genuine ownership or conviction.",
-      "Use no emojis, hashtags, em dashes, cheesy hooks, fake stories, fluff, unsupported claims, or excessive formatting.",
+      "Use no emojis, em dashes, cheesy hooks, fake stories, fluff, unsupported claims, or excessive formatting. Default to zero hashtags and never use more than three.",
       "Never mention Xyren or Xelerate. Keep build, development, and website work in the background unless explicitly requested.",
       "Default the LinkedIn draft to 150–300 words unless the request specifies otherwise.",
-      "Return Markdown with exactly these labeled sections for each post: Title, LinkedIn post draft, Primary pain angle, Why this angle should resonate, Suggested CTA, if any.",
+      "Choose formats using this target mix across batches: about 45% carousel/document, 30% custom image with strong copy, 10% genuine polls, and 15% text-only thought leadership.",
+      "For carousels, write a strong slide-one hook, one idea per slide, and a final takeaway or question. For image posts, provide a specific custom image concept. For polls, use genuine options without engagement bait.",
+      "Return Markdown with exactly these labeled sections for each post: Title, Recommended format, Format-specific creative brief, LinkedIn post draft, Primary pain angle, Why this angle should resonate, Suggested CTA, if any.",
       "Return publishable content, not commentary about the guide or your writing process.",
     ].join("\n");
   }
@@ -5401,12 +5425,15 @@ function buildSocialPostEvals({
   const postWords = wordCount(draftSection);
   const hasRequiredSections = [
     "title",
+    "recommended format",
+    "format-specific creative brief",
     "linkedin post draft",
     "primary pain angle",
     "why this angle should resonate",
     "suggested cta",
   ].every((label) => normalized.includes(label));
-  const hasForbiddenFormatting = /[\p{Extended_Pictographic}#]/u.test(draftSection) || draftSection.includes("—");
+  const hashtagCount = draftSection.match(/(?:^|\s)#[\p{L}\p{N}_]+/gu)?.length ?? 0;
+  const hasForbiddenFormatting = /\p{Extended_Pictographic}/u.test(draftSection) || draftSection.includes("—") || hashtagCount > 3;
   const mentionsRetiredBrand = /\b(?:xyren|xelerate)\b/i.test(body);
   const speaksToFounder = /\b(founder|your team|you|your)\b/i.test(draftSection);
   const executionSpecific = /\b(execution|ship|shipping|stakeholder|engineering|developer|priority|priorities|owner|ownership|progress)\b/i.test(draftSection);
@@ -5426,7 +5453,7 @@ function buildSocialPostEvals({
       name: "LinkedIn output contract",
       score: hasRequiredSections ? 95 : 55,
       passed: hasRequiredSections,
-      detail: "Includes title, post draft, pain angle, resonance rationale, and suggested CTA.",
+      detail: "Includes title, recommended format, creative brief, post draft, pain angle, resonance rationale, and suggested CTA.",
       hard: true,
       category: "quality",
     },
@@ -5449,7 +5476,7 @@ function buildSocialPostEvals({
       name: "Social style constraints",
       score: !hasForbiddenFormatting ? 96 : 45,
       passed: !hasForbiddenFormatting,
-      detail: "No emojis, hashtags, or em dashes in the LinkedIn draft.",
+      detail: `No emojis or em dashes, with no more than three hashtags. Found ${hashtagCount} hashtag${hashtagCount === 1 ? "" : "s"}.`,
       hard: true,
       category: "quality",
     },

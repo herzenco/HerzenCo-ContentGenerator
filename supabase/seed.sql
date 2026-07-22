@@ -114,7 +114,7 @@ select
   'Founder-facing, conversational, confident, human, direct, practical, lightly opinionated, and useful. Sound like an embedded operator who owns execution from inside the work, never a consultant, dev shop, or generic productivity creator. Use mostly we; use I only for genuine ownership or conviction.',
   'Founders at funded startups and established founder-led companies with digital products, especially non-technical founders navigating product and engineering complexity, shifting priorities, missing ownership, and stakeholder/developer drift.',
   '["Teams shipping chaos instead of progress", "Stakeholder and developer drift", "Missing ownership of digital work", "Shifting priorities", "Founders acting as translator and execution glue", "Output without business progress", "Execution problems misdiagnosed as developer problems", "Embedded project management", "Fractional product leadership", "Product strategy and execution"]'::jsonb,
-  '["Xyren or Xelerate", "Emojis", "Hashtags unless requested", "Em dashes", "Cheesy hooks", "Fake stories", "Unsupported claims or metrics", "Corporate or consultant tone", "Dev-shop positioning", "Generic productivity advice", "Fluff", "Leading with website, build, or development work"]'::jsonb,
+  '["Xyren or Xelerate", "Emojis", "More than three hashtags or decorative hashtag stuffing", "Em dashes", "Cheesy hooks", "Fake stories", "Unsupported claims or metrics", "Corporate or consultant tone", "Dev-shop positioning", "Generic productivity advice", "Fluff", "Leading with website, build, or development work", "Video or LinkedIn Live"]'::jsonb,
   array[
     'Lead with a founder problem that feels immediately familiar, explain the operating failure underneath it, then offer one practical change the team can use this week.',
     'The team can be shipping every week and still not be making progress. Output is not the same as execution when priorities move, decisions disappear, and nobody owns the path from stakeholder intent to what engineering builds.',
@@ -156,9 +156,20 @@ Lead with a real problem, make the pain specific, diagnose why it happens, offer
 
 Use a conversational, confident, human, direct, useful, lightly opinionated operator voice. Use mostly “we,” with “I” only when it adds ownership or conviction. The reader should feel: “This person gets the chaos I’m dealing with” and “I need this person inside my team.”
 
-Never mention Xyren or Xelerate. Use no emojis, hashtags unless requested, em dashes, cheesy hooks, fake stories, vague inspiration, unsupported claims, corporate language, consultant tone, dev-shop positioning, generic productivity advice, fluff, or excessive formatting. Keep build and website work in the background unless explicitly requested.
+## Format mix
+- Carousels or document posts: approximately 45%. Use a real hook on slide one, one idea per slide, and a clear takeaway or question at the end. This is the primary format for saves and dwell time.
+- Image posts with strong copy: approximately 30%. Use a specific custom image concept and let the copy carry one practical operator insight.
+- Polls: approximately 10%. Ask genuine, open-ended questions without engagement bait or false binary choices.
+- Text-only thought leadership: approximately 15%. Use a sharp first line, short skimmable paragraphs, and one practical point.
 
-Default to 150–300 words. Return: Title; LinkedIn post draft; Primary pain angle; Why this angle should resonate; Suggested CTA, if any. Vary posts across pain diagnosis, execution lessons, founder reframes, operating principles, team dysfunction, and practical how-we-think posts.$guide$,
+Video and LinkedIn Live are out of scope. Prioritize a LinkedIn Page newsletter using text and images.
+
+## Publishing and engagement
+Target 3–5 posts per week, starting with Tuesday through Thursday mornings. Employee advocacy is the strongest distribution lever. Comments matter more than likes. Reply to substantive comments within the first hour. Put external links in the first comment. Use zero hashtags by default and no more than three when strategically useful or explicitly requested.
+
+Never mention Xyren or Xelerate. Never use emojis, more than three hashtags, em dashes, cheesy hooks, fake stories, vague inspiration, unsupported claims, corporate language, consultant tone, dev-shop positioning, generic productivity advice, fluff, or excessive formatting. Keep build and website work in the background unless explicitly requested.
+
+Default to 150–300 words. Return: Title; Recommended format; Format-specific creative brief; LinkedIn post draft; Primary pain angle; Why this angle should resonate; Suggested CTA, if any. Vary posts across pain diagnosis, execution lessons, founder reframes, operating principles, team dysfunction, and practical how-we-think posts.$guide$,
   'written',
   true,
   0
