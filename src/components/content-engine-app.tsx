@@ -34,6 +34,7 @@ import {
   normalizeContentTypeForProperty,
   type PropertySurface,
 } from "@/lib/property-content-types";
+import type { AppRole } from "@/lib/auth/roles";
 
 type View = "home" | "content" | "properties" | "settings";
 type ContentMode = "list" | "calendar" | "ideas";
@@ -713,9 +714,10 @@ const emptyForm: QuickGenerateForm = {
 
 interface ContentEngineAppProps {
   userEmail: string;
+  role: AppRole;
 }
 
-export function ContentEngineApp({ userEmail }: ContentEngineAppProps) {
+export function ContentEngineApp({ userEmail, role }: ContentEngineAppProps) {
   const [state, setState] = useState<EngineState>(initialState);
   const [activeView, setActiveView] = useState<View>("home");
   const [contentMode, setContentMode] = useState<ContentMode>("list");
@@ -1025,6 +1027,10 @@ export function ContentEngineApp({ userEmail }: ContentEngineAppProps) {
   }
 
   function approveContent(id: string) {
+    if (role !== "admin" && role !== "publisher") {
+      setToast("Editor access: submit drafts for review; publishing requires approval.");
+      return;
+    }
     const item = state.content.find((entry) => entry.id === id);
     if (!item) return;
     const isFuture = item.publishAt

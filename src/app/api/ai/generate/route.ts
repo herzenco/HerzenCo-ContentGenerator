@@ -1,5 +1,5 @@
 import { ProviderNotConfiguredError, getProvider } from "@/lib/ai/providers";
-import { createServerSupabaseClient } from "@/utils/supabase/server";
+import { authorizeSession } from "@/lib/auth/server-authorization";
 import { z } from "zod";
 
 export const runtime = "nodejs";
@@ -73,27 +73,16 @@ function defaultModelFor(provider: "anthropic" | "openai") {
 }
 
 async function authorizeHerzenUser() {
-  try {
-    const supabase = await createServerSupabaseClient();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    const email = user?.email?.toLowerCase() ?? "";
-
-    if (!user || !email.endsWith(`@${allowedDomain}`)) {
-      return {
-        ok: false as const,
-        response: Response.json({ error: "unauthorized" }, { status: 401 }),
-      };
-    }
-
-    return { ok: true as const };
-  } catch {
+  const authorization = await authorizeSession(["admin", "publisher", "editor"]);
+  if (!authorization.ok) return authorization;
+  const email = authorization.user.email?.toLowerCase() ?? "";
+  if (!email.endsWith(`@${allowedDomain}`)) {
     return {
       ok: false as const,
-      response: Response.json({ error: "auth_not_configured" }, { status: 503 }),
+      response: Response.json({ error: "forbidden" }, { status: 403 }),
     };
   }
+  return { ok: true as const };
 }
 
 async function readJson(request: Request) {

@@ -1,5 +1,5 @@
 import { listPublishedContent, savePublishedContent, triggerWebsiteBuild } from "@/lib/published-content";
-import { createServerSupabaseClient } from "@/utils/supabase/server";
+import { authorizeSession } from "@/lib/auth/server-authorization";
 import {
   isContentTypeAllowedForProperty,
   propertySurfaceForSlug,
@@ -90,13 +90,11 @@ export async function POST(request: Request) {
 }
 
 async function authenticatedClient() {
-  try {
-    const supabase = await createServerSupabaseClient();
-    const { data } = await supabase.auth.getUser();
-    return data.user?.email?.toLowerCase().endsWith("@herzenco.co") ? supabase : null;
-  } catch {
-    return null;
-  }
+  const authorization = await authorizeSession(["admin", "publisher"]);
+  if (!authorization.ok) return null;
+  return authorization.user.email?.toLowerCase().endsWith("@herzenco.co")
+    ? authorization.supabase
+    : null;
 }
 
 async function readJson(request: Request) {
