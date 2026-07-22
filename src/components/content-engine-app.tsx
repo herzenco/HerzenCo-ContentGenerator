@@ -1656,36 +1656,26 @@ function HomeView({
         <Panel title="Needs you">
           <div className="space-y-3">
             {needsReview.map((item) => (
-              <div className="border border-amber-300/25 bg-amber-300/10 p-3" key={item.id}>
-                <div className="flex flex-wrap items-start justify-between gap-3">
-                  <div>
-                    <p className="font-medium text-amber-50">{item.title}</p>
-                    <p className="mt-1 text-sm text-amber-100/75">
-                      {propertyLabel(item.property)}
-                    </p>
-                  </div>
-                  <Score value={item.qualityScore} />
-                </div>
-                <p className="mt-3 text-sm text-amber-100/85">
-                  {primaryReviewReason(item.evals)}
-                </p>
-                <div className="mt-3 flex flex-wrap gap-2">
-                  <ActionButton icon={<Check size={16} />} label="Approve" onClick={() => onApprove(item.id)} tone="green" />
-                  <ActionButton icon={<RefreshCw size={16} />} label="Regenerate" onClick={() => onRegenerate(item.id)} tone="cyan" />
-                  <ActionButton icon={<FileText size={16} />} label="Open" onClick={() => onOpenContent(item.id)} tone="cyan" />
-                </div>
-              </div>
+              <NeedsReviewCard
+                item={item}
+                key={item.id}
+                onApprove={() => onApprove(item.id)}
+                onOpen={() => onOpenContent(item.id)}
+                onRegenerate={() => onRegenerate(item.id)}
+              />
             ))}
             {autopilotWarnings.map((warning) => (
-              <div className="border border-amber-300/25 bg-amber-300/10 p-3" key={warning.id}>
-                <p className="font-medium text-amber-50">
+              <div className="needs-you-card p-4" key={warning.id}>
+                <p className="editorial-eyebrow">Autopilot needs attention</p>
+                <p className="mt-2 font-medium text-[var(--text-primary)]">
                   {humanizeCode(warning.code)}
                 </p>
-                <details className="mt-2 text-xs text-amber-100/65">
-                  <summary>Details</summary>
-                  <p className="mt-1 font-mono">{warning.code}</p>
-                  <p className="mt-1">{warning.detail}</p>
-                </details>
+                <p className="mt-2 text-sm leading-relaxed text-[var(--text-secondary)]">
+                  {warning.detail}
+                </p>
+                <p className="mt-3 font-mono text-xs text-[var(--text-muted)]">
+                  {propertyLabel(warning.property)} · {warning.code}
+                </p>
               </div>
             ))}
             {needsReview.length === 0 && autopilotWarnings.length === 0 && (
@@ -1749,6 +1739,104 @@ function HomeView({
         </div>
       </div>
     </div>
+  );
+}
+
+function NeedsReviewCard({
+  item,
+  onApprove,
+  onOpen,
+  onRegenerate,
+}: {
+  item: ContentItem;
+  onApprove: () => void;
+  onOpen: () => void;
+  onRegenerate: () => void;
+}) {
+  const failedChecks = item.evals
+    .filter((result) => !result.passed)
+    .sort((a, b) => Number(Boolean(b.hard)) - Number(Boolean(a.hard)) || a.score - b.score);
+  const passedChecks = item.evals.filter((result) => result.passed).length;
+  const publishAction = item.publishAt
+    ? `Approve and schedule for ${formatDateTime(item.publishAt)}`
+    : "Approve and publish now";
+
+  return (
+    <article className="needs-you-card p-4 sm:p-5">
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div className="min-w-0 flex-1">
+          <p className="editorial-eyebrow">
+            {item.contentType.replaceAll("_", " ")} · {propertyLabel(item.property)}
+          </p>
+          <h3 className="mt-2 text-lg font-medium leading-snug text-[var(--text-primary)]">
+            {item.title}
+          </h3>
+          <p className="mt-2 text-sm leading-relaxed text-[var(--text-secondary)]">
+            {item.excerpt || item.prompt || "No summary was generated for this item."}
+          </p>
+        </div>
+        <div className="needs-you-score" aria-label={`Quality score ${item.qualityScore ?? "not available"}`}>
+          <span>Quality</span>
+          <strong>{item.qualityScore ?? "—"}</strong>
+          {item.qualityScore !== null && <small>/100</small>}
+        </div>
+      </div>
+
+      <div className="mt-4 grid gap-3 lg:grid-cols-[minmax(0,1.25fr)_minmax(0,1fr)]">
+        <div className="needs-you-detail">
+          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-[var(--clay-600)]">
+            Why this stopped
+          </p>
+          <p className="mt-2 text-sm leading-relaxed text-[var(--text-primary)]">
+            {primaryReviewReason(item.evals)}
+          </p>
+          <p className="mt-2 text-xs text-[var(--text-muted)]">
+            {failedChecks.length} {failedChecks.length === 1 ? "check needs" : "checks need"} attention · {passedChecks} passed
+          </p>
+        </div>
+
+        <div className="needs-you-detail">
+          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-[var(--text-secondary)]">
+            Review context
+          </p>
+          <dl className="mt-2 grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-sm">
+            <dt className="text-[var(--text-muted)]">Requested</dt>
+            <dd className="text-[var(--text-primary)]">{item.prompt || "No prompt saved"}</dd>
+            <dt className="text-[var(--text-muted)]">Created</dt>
+            <dd className="text-[var(--text-primary)]">{formatDateTime(item.createdAt)}</dd>
+            <dt className="text-[var(--text-muted)]">Source</dt>
+            <dd className="capitalize text-[var(--text-primary)]">{sourceLabel(item.source)}</dd>
+          </dl>
+        </div>
+      </div>
+
+      {failedChecks.length > 0 && (
+        <div className="mt-3 border-t border-[var(--border-hairline)] pt-3">
+          <p className="mb-2 text-xs font-semibold uppercase tracking-[0.14em] text-[var(--text-secondary)]">
+            Checks to review
+          </p>
+          <ul className="grid gap-2 md:grid-cols-2">
+            {failedChecks.slice(0, 4).map((result) => (
+              <li className="flex gap-2 text-sm" key={result.name}>
+                <span className="mt-1 h-2 w-2 shrink-0 bg-[var(--clay-500)]" aria-hidden="true" />
+                <span>
+                  <strong className="font-medium text-[var(--text-primary)]">
+                    {humanizeEval(result.name, result.detail)}
+                  </strong>
+                  <span className="block text-[var(--text-secondary)]">{result.detail}</span>
+                </span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-[var(--border-hairline)] pt-4">
+        <ActionButton icon={<Check size={16} />} label={publishAction} onClick={onApprove} tone="green" />
+        <ActionButton icon={<FileText size={16} />} label="Review full draft" onClick={onOpen} tone="cyan" />
+        <ActionButton icon={<RefreshCw size={16} />} label="Regenerate draft" onClick={onRegenerate} tone="cyan" />
+      </div>
+    </article>
   );
 }
 

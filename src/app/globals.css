@@ -219,6 +219,48 @@ textarea {
   text-transform: uppercase;
 }
 
+.needs-you-card {
+  background: #fbf5e8;
+  border: 1px solid rgba(156, 92, 62, 0.28);
+  box-shadow: var(--shadow-sm);
+  color: var(--text-primary);
+}
+
+.needs-you-detail {
+  background: rgba(252, 250, 245, 0.72);
+  border: 1px solid var(--border-hairline);
+  padding: var(--space-3);
+}
+
+.needs-you-score {
+  align-items: baseline;
+  background: var(--surface-card);
+  border: 1px solid var(--border-soft);
+  display: flex;
+  gap: 3px;
+  min-width: 88px;
+  padding: 8px 10px;
+}
+
+.needs-you-score span {
+  color: var(--text-muted);
+  font-size: 0.7rem;
+  letter-spacing: 0.08em;
+  margin-right: auto;
+  text-transform: uppercase;
+}
+
+.needs-you-score strong {
+  color: var(--text-primary);
+  font-size: 1.125rem;
+  font-weight: var(--weight-semibold);
+}
+
+.needs-you-score small {
+  color: var(--text-muted);
+  font-size: 0.7rem;
+}
+
 @media (max-width: 1023px) {
   .engine-sidebar {
     border-bottom: 1px solid var(--border-on-dark);
