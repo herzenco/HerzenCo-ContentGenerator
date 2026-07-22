@@ -44,6 +44,7 @@ type ContentStatus =
   | "drafting"
   | "qa"
   | "needs_review"
+  | "approved"
   | "scheduled"
   | "published"
   | "rejected"
@@ -1076,12 +1077,28 @@ export function ContentEngineApp({ userEmail, role }: ContentEngineAppProps) {
   }
 
   async function approveContent(id: string) {
-    if (role !== "admin" && role !== "publisher") {
-      setToast("Editor access: submit drafts for review; publishing requires approval.");
+    if (role !== "admin" && role !== "publisher" && role !== "reviewer") {
+      setToast("Editor access: submit drafts for review; approval requires reviewer access.");
       return;
     }
     const item = state.content.find((entry) => entry.id === id);
     if (!item) return;
+    if (role === "reviewer") {
+      if (!item.serverBacked) {
+        setToast("Only server-backed drafts can be approved by a reviewer.");
+        return;
+      }
+      try {
+        const response = await fetch(`/api/workspace/content/${item.id}/approve`, { method: "POST" });
+        const payload = (await response.json()) as { message?: string };
+        if (!response.ok) throw new Error(payload.message || "Approval failed");
+        setContentItem(id, { status: "approved" });
+        setToast("Content approved and held for publishing");
+      } catch (error) {
+        setToast(error instanceof Error ? error.message : "Approval failed");
+      }
+      return;
+    }
     if (item.serverBacked) {
       try {
         const response = await fetch(`/api/workspace/content/${item.id}/publish`, { method: "POST" });
@@ -1137,6 +1154,10 @@ export function ContentEngineApp({ userEmail, role }: ContentEngineAppProps) {
   }
 
   function publishNow(id: string) {
+    if (role !== "admin" && role !== "publisher") {
+      setToast("Publishing requires publisher access.");
+      return;
+    }
     const item = state.content.find((entry) => entry.id === id);
     if (!item) return;
     const patch: Partial<ContentItem> = {
@@ -1523,6 +1544,7 @@ export function ContentEngineApp({ userEmail, role }: ContentEngineAppProps) {
           <div className="engine-content p-6 xl:p-8">
             {activeView === "home" && (
               <HomeView
+                approvalOnly={role === "reviewer"}
                 autopilotWarnings={state.autopilotWarnings}
                 content={state.content}
                 form={form}
@@ -1679,6 +1701,7 @@ export function ContentEngineApp({ userEmail, role }: ContentEngineAppProps) {
 }
 
 function HomeView({
+  approvalOnly,
   autopilotWarnings,
   content,
   form,
@@ -1698,6 +1721,7 @@ function HomeView({
   profileCompleteness,
   selectedContent,
 }: {
+  approvalOnly: boolean;
   autopilotWarnings: AutopilotWarning[];
   content: ContentItem[];
   form: QuickGenerateForm;
@@ -1896,6 +1920,7 @@ function HomeView({
           <div className="space-y-3">
             {needsReview.map((item) => (
               <NeedsReviewCard
+                approvalOnly={approvalOnly}
                 item={item}
                 key={item.id}
                 onApprove={() => onApprove(item.id)}
@@ -1982,11 +2007,13 @@ function HomeView({
 }
 
 function NeedsReviewCard({
+  approvalOnly,
   item,
   onApprove,
   onOpen,
   onRegenerate,
 }: {
+  approvalOnly: boolean;
   item: ContentItem;
   onApprove: () => void;
   onOpen: () => void;
@@ -1996,9 +2023,11 @@ function NeedsReviewCard({
     .filter((result) => !result.passed)
     .sort((a, b) => Number(Boolean(b.hard)) - Number(Boolean(a.hard)) || a.score - b.score);
   const passedChecks = item.evals.filter((result) => result.passed).length;
-  const publishAction = item.publishAt
-    ? `Approve and schedule for ${formatDateTime(item.publishAt)}`
-    : "Approve and publish now";
+  const publishAction = approvalOnly
+    ? "Approve for publishing"
+    : item.publishAt
+      ? `Approve and schedule for ${formatDateTime(item.publishAt)}`
+      : "Approve and publish now";
 
   return (
     <article className="needs-you-card p-4 sm:p-5">
@@ -2151,7 +2180,7 @@ function ContentView({
               </select>
               <select className={fieldClass} onChange={(event) => setStatusFilter(event.target.value as ContentStatus | "all")} value={statusFilter}>
                 <option value="all">All statuses</option>
-                {(["drafting", "qa", "needs_review", "scheduled", "published", "rejected", "failed"] as ContentStatus[]).map((status) => (
+                {(["drafting", "qa", "needs_review", "approved", "scheduled", "published", "rejected", "failed"] as ContentStatus[]).map((status) => (
                   <option key={status} value={status}>{statusLabel(status)}</option>
                 ))}
               </select>
@@ -4713,8 +4742,10 @@ function StatusBadge({ status }: { status: ContentStatus }) {
       ? "green"
       : status === "scheduled"
         ? "cyan"
-        : status === "needs_review"
-          ? "amber"
+        : status === "approved"
+          ? "green"
+          : status === "needs_review"
+            ? "amber"
           : status === "failed" || status === "rejected"
             ? "red"
             : "gray";
@@ -4856,7 +4887,7 @@ function workspaceRecordToContentItem(record: WorkspaceContentRecord): ContentIt
     draft: "drafting",
     in_qa: "qa",
     needs_review: "needs_review",
-    approved: "needs_review",
+    approved: "approved",
     scheduled: "scheduled",
     published: "published",
     failed: "failed",
@@ -6062,6 +6093,7 @@ function statusLabel(status: ContentStatus) {
     drafting: "Drafting",
     qa: "QA",
     needs_review: "Review",
+    approved: "Approved",
     scheduled: "Scheduled",
     published: "Published",
     rejected: "Rejected",

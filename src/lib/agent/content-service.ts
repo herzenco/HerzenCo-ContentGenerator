@@ -291,6 +291,25 @@ export async function submitAgentDraftForReview(id: string, principal: AgentPrin
   return getAgentContent(id);
 }
 
+export async function approveAgentContent(id: string, principal: AgentPrincipal) {
+  const admin = createSupabaseAdminClient();
+  const { data, error } = await admin
+    .from("content_items")
+    .update({ status: "approved" })
+    .eq("id", id)
+    .eq("status", "needs_review")
+    .select("id")
+    .maybeSingle();
+  if (error) throw new Error(error.message);
+  if (!data) {
+    const current = await getAgentContent(id);
+    if (current.status === "approved") return current;
+    throw new Error("content_not_found_or_not_awaiting_review");
+  }
+  await auditAgent(principal, "content.approve", "content_item", id, {});
+  return getAgentContent(id);
+}
+
 async function loadPropertyContext(slug: string) {
   const admin = createSupabaseAdminClient();
   const { data: property, error } = await admin

@@ -1,5 +1,6 @@
 import { authenticateAgentRequest } from "@/lib/agent/auth";
 import {
+  approveAgentContent,
   generateAgentDraft,
   getAgentContent,
   listAgentContent,
@@ -89,6 +90,19 @@ export async function POST(request: Request) {
     async (input) => {
       requireScope(principal.scopes, "content:write");
       return toolResult(await reviseAgentDraft(input, principal));
+    },
+  );
+  server.registerTool(
+    "approve_content",
+    {
+      title: "Approve content",
+      description: "Approve an item in Needs Review without publishing, scheduling, or triggering a deployment.",
+      inputSchema: z.object({ id: z.string().uuid() }),
+      annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true },
+    },
+    async ({ id }) => {
+      requireScope(principal.scopes, "content:approve");
+      return toolResult(await approveAgentContent(id, principal));
     },
   );
   server.registerTool(

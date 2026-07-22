@@ -73,7 +73,7 @@ function defaultModelFor(provider: "anthropic" | "openai") {
 }
 
 async function authorizeHerzenUser() {
-  const authorization = await authorizeSession(["admin", "publisher", "editor"]);
+  const authorization = await authorizeSession(["admin", "publisher", "reviewer", "editor"]);
   if (!authorization.ok) return authorization;
   const email = authorization.user.email?.toLowerCase() ?? "";
   if (!email.endsWith(`@${allowedDomain}`)) {

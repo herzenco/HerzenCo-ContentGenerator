@@ -4,7 +4,7 @@ import { createHash } from "node:crypto";
 import { createSupabaseAdminClient } from "@/utils/supabase/admin";
 
 export interface AgentPrincipal {
-  apiKeyId: string;
+  apiKeyId: string | null;
   actorUserId: string;
   scopes: string[];
 }
