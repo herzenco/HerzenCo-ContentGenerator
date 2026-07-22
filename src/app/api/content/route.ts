@@ -56,14 +56,15 @@ export async function POST(request: Request) {
 
   try {
     const content = await savePublishedContent(supabase, parsed.data);
-    await triggerWebsiteBuild(content.deployHookUrl);
+    const websiteBuildTriggered = Boolean(content.deployHookUrl?.trim());
+    if (websiteBuildTriggered) await triggerWebsiteBuild(content.deployHookUrl);
     const publicContent = {
       id: content.id,
       slug: content.slug,
       version: content.version,
       publishedAt: content.publishedAt,
     };
-    return Response.json({ data: publicContent, websiteBuildTriggered: true }, { status: 201 });
+    return Response.json({ data: publicContent, websiteBuildTriggered }, { status: 201 });
   } catch (error) {
     console.error("Content publish failed", error);
     return Response.json(

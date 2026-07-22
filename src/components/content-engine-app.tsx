@@ -310,6 +310,60 @@ Do not call Xyren “web design” or reduce it to pages. Avoid generic agency c
 ## Source status
 This guide was compiled July 21, 2026 from project strategy documents and May 2026 audits. The live sites were unavailable during compilation. Verify current site copy, pricing, offers, blog titles, testimonials, and performance claims before presenting them as current facts.`;
 
+const herzenSocialStrategyGuide = `# Herzen Co. — LinkedIn Content Strategy
+
+## Purpose
+Generate founder-facing LinkedIn posts that Lupe can review, lightly edit, and queue for posting. This guide is the source of truth for positioning, tone, ICP, pain points, constraints, emphasis, and exclusions.
+
+## Brand direction and offer priority
+Herzen Co. is the only public-facing brand. Xyren and Xelerate are likely retired and must never be mentioned. Lead commercially with project management for digital teams, followed by fractional product leadership, then product strategy and execution. Build, website, and development work may remain commercially real but must stay in the background unless explicitly requested. The public impression must be an embedded project-management and product-leadership partner, never a dev shop.
+
+## Ideal client
+Write directly to founders at funded startups and established founder-led companies with digital products, especially non-technical founders navigating product and engineering complexity. The reader should feel: “This person gets the chaos I’m dealing with” and “I need this person inside my team.”
+
+## Positioning and value
+Position Herzen Co. as an embedded operator who personally leads the work and owns execution from inside the team, not a traditional consultant observing from outside. Execution is the core value being bought. Clarity, accountability, alignment, and speed support execution but do not replace it. Keep the translator role between stakeholders and engineering implicit.
+
+## Core pain stack
+1. Teams keep shipping chaos instead of progress.
+2. What stakeholders want and what developers build keep drifting apart.
+3. Nobody owns the digital work.
+4. Priorities keep changing and nothing lands.
+5. Founders are forced to translate between business and technical teams.
+6. Output happens without meaningful business progress.
+7. Execution problems get misdiagnosed as developer problems.
+
+## Content model
+Open with a real, specific founder problem. Clarify why it happens. Diagnose or reframe it. Offer a practical fix, lens, operating principle, or takeaway. End cleanly without manufactured inspiration. The preferred underlying model is: founder with a recognizable problem, followed by a usable solution.
+
+Vary posts across pain and diagnosis, execution lessons, founder reframes, operating principles, team dysfunction observations, and practical how-we-think posts. Test angles and iterate from performance rather than treating one message as permanently correct.
+
+## Voice
+Conversational, confident, human, practical, lightly opinionated, credible, direct, and useful. Sound hands-dirty and embedded in the work. Use mostly “we,” while allowing “I” when it adds ownership, conviction, or credibility. Make it implicitly clear that Herzen personally leads the work. Prefer plain language to jargon and practical specificity to abstraction.
+
+## Hard constraints
+- No emojis.
+- No hashtags unless explicitly requested.
+- No em dashes.
+- No cheesy hooks, fake storytelling, fluff, or vague inspiration.
+- No “hot take” framing unless genuinely earned.
+- No corporate, consultant, dev-shop, or generic productivity-creator tone.
+- No excessive formatting tricks.
+- Never mention Xyren or Xelerate.
+- Never invent claims, metrics, client stories, or credentials.
+- Keep build, development, and site work in the background unless explicitly requested.
+- Keep paragraphs readable and natural.
+
+## Output contract
+Default to one 150–300 word LinkedIn post unless the request asks for a batch or another length. For each post provide:
+1. Title
+2. LinkedIn post draft
+3. Primary pain angle
+4. Why this angle should resonate
+5. Suggested CTA, if any
+
+Do not merely restate this guide. Produce native, sharp, publishable LinkedIn writing. When given several topics, create one distinct post per topic. For a batch, vary the pain angles. During revisions, preserve this strategy and voice.`;
+
 const humanismoVoiceGuide = `# Humanismo Evolutivo — Content, Tone & Voice Guide
 
 ## Foundation
@@ -379,6 +433,15 @@ const initialState: EngineState = {
       active: true,
       imagesEnabled: false,
     },
+    {
+      slug: "herzenco-social",
+      name: "Social Media Content",
+      domain: "LinkedIn · Herzen Co.",
+      language: "English",
+      threshold: 100,
+      active: true,
+      imagesEnabled: false,
+    },
   ],
   content: [],
   topics: [],
@@ -429,6 +492,29 @@ const initialState: EngineState = {
       visualRules:
         "Bridge science and spirituality without sectarian symbolism; represent people with dignity and universality; avoid fear-driven ecological imagery, guru or manifestation clichés, corporate stock-photo tropes, partisan symbols, dogmatic religious claims, text-heavy generated images, and doom-oriented compositions.",
     },
+    {
+      property: "herzenco-social",
+      voice:
+        "Founder-facing, conversational, confident, human, direct, practical, lightly opinionated, and useful. Sound like an embedded operator who is inside the work and owns execution, never like a consultant observing from outside. Use mostly we, with I only when it adds real ownership or conviction. Keep paragraphs natural and the language plain.",
+      audience:
+        "Founders at funded startups and established founder-led companies with digital products, especially non-technical founders dealing with product and engineering complexity, shifting priorities, missing ownership, and stakeholder/developer drift.",
+      pillars:
+        "Teams shipping chaos instead of progress; stakeholder and developer drift; missing ownership of digital work; shifting priorities; founders acting as translator and execution glue; output without business progress; execution problems misdiagnosed as developer problems; embedded project management; fractional product leadership; product strategy and execution",
+      banned:
+        "Xyren or Xelerate; emojis; hashtags unless requested; em dashes; cheesy hooks; fake stories; unsupported claims, metrics, credentials, or client outcomes; hot-take framing without substance; corporate language; consultant tone; dev-shop positioning; generic productivity advice; fluff; excessive formatting; leading with website, build, or development work",
+      cta:
+        "Use no CTA when the insight lands cleanly. When useful, end with a low-pressure founder-facing question or an invitation to compare how execution ownership works inside their team. Never force a sales pitch.",
+      styleExamples: [
+        "Lead with a founder problem that feels immediately familiar, explain the operating failure underneath it, then offer one practical change the team can use this week.",
+        "The team can be shipping every week and still not be making progress. Output is not the same as execution when priorities move, decisions disappear, and nobody owns the path from stakeholder intent to what engineering builds.",
+        "Keep the translator role implicit. Show that we understand where business intent gets lost and how an embedded owner closes the gap.",
+      ],
+      defaultCtas: [],
+      visualStyleDescription: "",
+      visualPalette: "",
+      visualRules:
+        "LinkedIn posts are text-first. Do not generate an image unless explicitly requested. If a visual is requested, keep it editorial, restrained, operator-led, and free of text-heavy social templates.",
+    },
   ],
   contextDocs: [
     {
@@ -450,6 +536,16 @@ const initialState: EngineState = {
       active: true,
       sortOrder: 0,
       createdAt: "2026-07-21T00:00:00.000Z",
+    },
+    {
+      id: "context_herzen_social_strategy_2026_07_22",
+      property: "herzenco-social",
+      title: "Herzen Co. — LinkedIn Content Strategy (July 22, 2026)",
+      contentMd: herzenSocialStrategyGuide,
+      source: "written",
+      active: true,
+      sortOrder: 0,
+      createdAt: "2026-07-22T00:00:00.000Z",
     },
   ],
   metrics: [],
@@ -685,9 +781,17 @@ export function ContentEngineApp({ userEmail }: ContentEngineAppProps) {
           heroImageAlt: item.heroImageAlt ?? null,
         }),
       });
-      const payload = (await response.json()) as { data?: { slug?: string }; message?: string };
+      const payload = (await response.json()) as {
+        data?: { slug?: string };
+        message?: string;
+        websiteBuildTriggered?: boolean;
+      };
       if (!response.ok) throw new Error(payload.message || "Website publishing failed");
-      setToast(`Published /resources/${payload.data?.slug ?? ""}/`);
+      setToast(
+        item.property === "herzenco-social"
+          ? "LinkedIn draft approved"
+          : `Published /resources/${payload.data?.slug ?? ""}/`,
+      );
     } catch (error) {
       setToast(error instanceof Error ? error.message : "Website publishing failed");
     }
@@ -821,6 +925,8 @@ export function ContentEngineApp({ userEmail }: ContentEngineAppProps) {
     setForm({
       ...emptyForm,
       property: form.property,
+      contentType: form.property === "herzenco-social" ? "social_post" : "article",
+      skipAutoPublish: form.property === "herzenco-social",
       generateHeroImage: Boolean(property?.imagesEnabled),
     });
     setToast("Draft job started");
@@ -840,7 +946,11 @@ export function ContentEngineApp({ userEmail }: ContentEngineAppProps) {
           provider: draftModel.provider,
           model: draftModel.modelId,
           maxOutputTokens: 8_000,
-          instructions: buildArticleInstructions(property?.language ?? "English"),
+          instructions: buildContentInstructions(
+            property?.language ?? "English",
+            item.contentType,
+            item.property,
+          ),
           prompt: buildArticlePrompt({
             title,
             request: form.prompt.trim(),
@@ -952,9 +1062,11 @@ export function ContentEngineApp({ userEmail }: ContentEngineAppProps) {
     setForm({
       ...emptyForm,
       property: topic.property,
+      contentType: topic.property === "herzenco-social" ? "social_post" : "article",
       prompt: `${topic.title}. ${topic.angle}`,
       title: topic.title,
       keywords: topic.keywords.join(", "),
+      skipAutoPublish: topic.property === "herzenco-social",
     });
     setActiveView("home");
     setState((current) => ({
@@ -1510,6 +1622,10 @@ function HomeView({
                   onChange({
                     ...form,
                     property: property.slug,
+                    contentType:
+                      property.slug === "herzenco-social" ? "social_post" : form.contentType,
+                    skipAutoPublish:
+                      property.slug === "herzenco-social" ? true : form.skipAutoPublish,
                     generateHeroImage: Boolean(property.imagesEnabled),
                   })
                 }
@@ -4504,9 +4620,12 @@ function mergeById<T extends { id: string }>(saved: T[], seeded: T[]) {
 }
 
 function normalizeState(saved: Partial<EngineState>): EngineState {
-  const properties = (saved.properties?.length ? saved.properties : initialState.properties).map(
-    (property) => ({ ...property, imagesEnabled: property.imagesEnabled ?? false }),
-  );
+  const savedProperties = saved.properties ?? [];
+  const savedPropertySlugs = new Set(savedProperties.map((property) => property.slug));
+  const properties = [
+    ...savedProperties,
+    ...initialState.properties.filter((property) => !savedPropertySlugs.has(property.slug)),
+  ].map((property) => ({ ...property, imagesEnabled: property.imagesEnabled ?? false }));
   const brands = properties.map((property) => {
     const savedBrand = saved.brands?.find((brand) => brand.property === property.slug);
     const seedBrand = initialState.brands.find((brand) => brand.property === property.slug);
@@ -4596,6 +4715,7 @@ function getVisualProfileCompleteness(state: EngineState, property: PropertySlug
 }
 
 function makeDefaultAutopilotSetting(property: PropertySlug): AutopilotSetting {
+  const contentType = property === "herzenco-social" ? "social_post" : "article";
   return {
     property,
     enabled: false,
@@ -4604,7 +4724,7 @@ function makeDefaultAutopilotSetting(property: PropertySlug): AutopilotSetting {
     piecesPerCycle: 1,
     publishTime: "09:00",
     publishDays: ["tue"],
-    contentType: "article",
+    contentType,
     maxQueued: 3,
     backlogPriorityThreshold: 7,
     nextRunAt: nextAutopilotRun({
@@ -4615,7 +4735,7 @@ function makeDefaultAutopilotSetting(property: PropertySlug): AutopilotSetting {
       piecesPerCycle: 1,
       publishTime: "09:00",
       publishDays: ["tue"],
-      contentType: "article",
+      contentType,
       maxQueued: 3,
       backlogPriorityThreshold: 7,
     }),
@@ -5031,7 +5151,27 @@ function makeMetaDescription(excerpt: string, primaryKeyword: string, language =
   return `${combined} ${language === "Spanish" ? "Incluye una respuesta directa, estructura FAQ y recomendaciones accionables." : "Includes a direct answer, FAQ structure, and actionable recommendations."}`.slice(0, 155);
 }
 
-function buildArticleInstructions(language: string) {
+function buildContentInstructions(
+  language: string,
+  contentType: ContentItem["contentType"],
+  property: PropertySlug,
+) {
+  if (contentType === "social_post" || property === "herzenco-social") {
+    return [
+      "You are writing LinkedIn content for Herzen Co.",
+      `Write in ${language}.`,
+      "Treat the supplied LinkedIn strategy guide as the source of truth.",
+      "Write directly to founders. Lead with a specific execution problem, diagnose why it happens, offer a practical fix or reframe, and end cleanly.",
+      "Sound like an embedded operator who owns execution, not a consultant, dev shop, or productivity creator.",
+      "Use mostly we. Use I only when it adds genuine ownership or conviction.",
+      "Use no emojis, hashtags, em dashes, cheesy hooks, fake stories, fluff, unsupported claims, or excessive formatting.",
+      "Never mention Xyren or Xelerate. Keep build, development, and website work in the background unless explicitly requested.",
+      "Default the LinkedIn draft to 150–300 words unless the request specifies otherwise.",
+      "Return Markdown with exactly these labeled sections for each post: Title, LinkedIn post draft, Primary pain angle, Why this angle should resonate, Suggested CTA, if any.",
+      "Return publishable content, not commentary about the guide or your writing process.",
+    ].join("\n");
+  }
+
   return [
     "You are the production writer for the Herzen Content Engine.",
     `Write in ${language}.`,
@@ -5103,6 +5243,10 @@ function buildEvals({
   language: string;
   score: number;
 }): EvalResult[] {
+  if (item.contentType === "social_post" || item.property === "herzenco-social") {
+    return buildSocialPostEvals({ context, hardFail, item, language, score });
+  }
+
   const primaryKeyword = estimatePrimaryKeyword(item);
   const slug = slugifyTitle(item.title);
   const body = item.body;
@@ -5227,6 +5371,95 @@ function buildEvals({
       passed: hasList,
       detail: "Includes at least one list or step sequence where useful.",
       category: "aeo",
+    },
+    {
+      name: "Language",
+      score: Math.min(97, score + 8),
+      passed: true,
+      detail: language === "Spanish" ? "Spanish output." : "English output.",
+      category: "quality",
+    },
+  ];
+}
+
+function buildSocialPostEvals({
+  context,
+  hardFail,
+  item,
+  language,
+  score,
+}: {
+  context: string;
+  hardFail: boolean;
+  item: ContentItem;
+  language: string;
+  score: number;
+}): EvalResult[] {
+  const body = item.body;
+  const normalized = body.toLowerCase();
+  const draftSection = body.match(/(?:^|\n)#{0,3}\s*linkedin post draft\s*\n([\s\S]*?)(?=\n#{0,3}\s*(?:primary pain angle|why this angle should resonate|suggested cta)|$)/i)?.[1] ?? body;
+  const postWords = wordCount(draftSection);
+  const hasRequiredSections = [
+    "title",
+    "linkedin post draft",
+    "primary pain angle",
+    "why this angle should resonate",
+    "suggested cta",
+  ].every((label) => normalized.includes(label));
+  const hasForbiddenFormatting = /[\p{Extended_Pictographic}#]/u.test(draftSection) || draftSection.includes("—");
+  const mentionsRetiredBrand = /\b(?:xyren|xelerate)\b/i.test(body);
+  const speaksToFounder = /\b(founder|your team|you|your)\b/i.test(draftSection);
+  const executionSpecific = /\b(execution|ship|shipping|stakeholder|engineering|developer|priority|priorities|owner|ownership|progress)\b/i.test(draftSection);
+
+  return [
+    {
+      name: "Brand alignment",
+      score: hardFail ? 75 : Math.min(97, score + 6),
+      passed: !hardFail && context.trim().length > 0 && !mentionsRetiredBrand,
+      detail: hardFail
+        ? "Review-first workflow: confirm the draft feels embedded, operator-led, and faithful to the strategy."
+        : "The draft uses the active Herzen Co. LinkedIn strategy and avoids retired brands.",
+      hard: true,
+      category: "brand",
+    },
+    {
+      name: "LinkedIn output contract",
+      score: hasRequiredSections ? 95 : 55,
+      passed: hasRequiredSections,
+      detail: "Includes title, post draft, pain angle, resonance rationale, and suggested CTA.",
+      hard: true,
+      category: "quality",
+    },
+    {
+      name: "LinkedIn length",
+      score: postWords >= 150 && postWords <= 300 ? 94 : 65,
+      passed: postWords >= 150 && postWords <= 300,
+      detail: `${postWords} words in the post draft; target is 150–300 unless the request overrides it.`,
+      category: "quality",
+    },
+    {
+      name: "Founder relevance",
+      score: speaksToFounder && executionSpecific ? 93 : 62,
+      passed: speaksToFounder && executionSpecific,
+      detail: "Speaks directly to founders through a concrete execution, ownership, priority, or stakeholder/engineering problem.",
+      hard: true,
+      category: "brand",
+    },
+    {
+      name: "Social style constraints",
+      score: !hasForbiddenFormatting ? 96 : 45,
+      passed: !hasForbiddenFormatting,
+      detail: "No emojis, hashtags, or em dashes in the LinkedIn draft.",
+      hard: true,
+      category: "quality",
+    },
+    {
+      name: "Retired brand exclusion",
+      score: !mentionsRetiredBrand ? 100 : 0,
+      passed: !mentionsRetiredBrand,
+      detail: "Does not mention Xyren or Xelerate.",
+      hard: true,
+      category: "brand",
     },
     {
       name: "Language",
@@ -5408,6 +5641,7 @@ function averageScore(content: ContentItem[]) {
 function propertyLabel(property: PropertySlug) {
   if (property === "herzenco") return "herzenco.co";
   if (property === "humanismo-evolutivo") return "humanismoevolutivo.com";
+  if (property === "herzenco-social") return "LinkedIn · Herzen Co.";
   return property;
 }
 
