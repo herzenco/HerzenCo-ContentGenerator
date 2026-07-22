@@ -66,6 +66,25 @@ export function AuthForm({ allowedDomain }: AuthFormProps) {
     window.location.reload();
   }
 
+  async function handleMagicLink() {
+    setMessage("");
+    if (!hasAllowedDomain) {
+      setMessage(`Use your @${allowedDomain} email address.`);
+      return;
+    }
+    setIsSubmitting(true);
+    const supabase = createClient();
+    const { error } = await supabase.auth.signInWithOtp({
+      email: normalizedEmail,
+      options: {
+        emailRedirectTo: `${window.location.origin}/auth/confirm`,
+        shouldCreateUser: false,
+      },
+    });
+    setIsSubmitting(false);
+    setMessage(error ? error.message : "Sign-in link sent. Check your Herzen Co. inbox.");
+  }
+
   return (
     <main className="min-h-screen bg-[var(--color-paper)] px-5 py-8 text-[var(--color-ink)]">
       <section className="mx-auto grid min-h-[calc(100vh-4rem)] max-w-6xl items-center gap-8 lg:grid-cols-[1fr_440px]">
@@ -78,7 +97,7 @@ export function AuthForm({ allowedDomain }: AuthFormProps) {
             Private operator access
           </h1>
           <p className="mt-5 max-w-xl text-base leading-7 text-[var(--color-text-secondary)]">
-            Sign in with a Herzen Co. email and password to manage content,
+            Sign in with a Herzen Co. email and password or a secure email link to manage content,
             properties, review workflows, model routing, and performance.
           </p>
         </div>
@@ -149,6 +168,18 @@ export function AuthForm({ allowedDomain }: AuthFormProps) {
             {isSubmitting && <Loader2 size={16} className="animate-spin" />}
             {mode === "sign-in" ? "Sign in" : "Create account"}
           </button>
+
+          {mode === "sign-in" && (
+            <button
+              className="mt-3 inline-flex w-full items-center justify-center gap-2 border border-[var(--color-border)] px-4 py-3 text-xs font-semibold uppercase tracking-[0.12em] text-[var(--color-ink)] transition-colors hover:border-[var(--color-clay)] hover:text-[var(--color-clay)] disabled:cursor-not-allowed disabled:opacity-60"
+              disabled={isSubmitting}
+              onClick={handleMagicLink}
+              type="button"
+            >
+              <Mail size={16} />
+              Email me a sign-in link
+            </button>
+          )}
 
           <button
             className="mt-4 w-full text-center text-sm text-[var(--color-text-secondary)] transition-colors hover:text-[var(--color-clay)]"
