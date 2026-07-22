@@ -981,7 +981,7 @@ export function ContentEngineApp({ userEmail }: ContentEngineAppProps) {
             item.property,
           ),
           prompt: buildArticlePrompt({
-            title,
+            requestedTitle: form.title.trim(),
             request: form.prompt.trim(),
             keywords,
             toneOverride: form.toneOverride.trim(),
@@ -997,8 +997,13 @@ export function ContentEngineApp({ userEmail }: ContentEngineAppProps) {
         throw new Error(payload.message || "The provider returned no article.");
       }
 
-      const generatedItem = { ...item, body: payload.data.text };
-      setContentItem(id, { body: payload.data.text });
+      const generatedItem = applyGeneratedContent(
+        item,
+        payload.data.text,
+        Boolean(form.title.trim()),
+        property.language,
+      );
+      setContentItem(id, generatedItem);
       setToast(`Draft received from ${payload.data.model ?? draftModel.displayName}`);
       finishPipeline(generatedItem, form.skipAutoPublish);
     } catch (error) {
@@ -5219,6 +5224,134 @@ function makeExcerpt(prompt: string, language = "English") {
   return `A generated article about ${prompt.toLowerCase().slice(0, 100)}.`;
 }
 
+function applyGeneratedContent(
+  item: ContentItem,
+  generatedText: string,
+  titleWasFixed: boolean,
+  language: PropertyConfig["language"],
+): ContentItem {
+  const extractedTitle = extractGeneratedTitle(generatedText, item.contentType);
+  const title = titleWasFixed
+    ? item.title
+    : extractedTitle || makeFallbackGeneratedTitle(generatedText, item.contentType, language);
+  const excerpt = extractGeneratedExcerpt(generatedText, item.contentType, language);
+  const primaryKeyword = item.keywords[0] ?? title.split(/\s+/).slice(0, 3).join(" ");
+  const metaDescription = makeGeneratedMetaDescription(excerpt, primaryKeyword, language);
+
+  return {
+    ...item,
+    title,
+    body: generatedText.trim(),
+    excerpt,
+    metaTitle: title.slice(0, 60),
+    metaDescription,
+    socialMeta: {
+      ogTitle: title.slice(0, 60),
+      ogDescription: metaDescription,
+      ogType: "article",
+      ...(item.socialMeta?.ogImage ? { ogImage: item.socialMeta.ogImage } : {}),
+    },
+  };
+}
+
+function extractGeneratedTitle(text: string, contentType: ContentItem["contentType"]) {
+  if (contentType !== "social_post") {
+    return cleanGeneratedTitle(text.match(/^#\s+(.+)$/m)?.[1] ?? "");
+  }
+
+  const inlineTitle = text.match(/^\s*(?:#{1,3}\s*)?(?:\*\*)?Title(?:\*\*)?\s*:\s*(.+)$/im)?.[1];
+  if (inlineTitle) return cleanGeneratedTitle(inlineTitle);
+
+  const titleSection = text.match(
+    /^\s*(?:#{1,3}\s*)?(?:\*\*)?Title(?:\*\*)?\s*:?[ \t]*\n+([^\n]+)/im,
+  )?.[1];
+  return cleanGeneratedTitle(titleSection ?? "");
+}
+
+function cleanGeneratedTitle(value: string) {
+  return value
+    .replace(/^\s*(?:title\s*:\s*)/i, "")
+    .replace(/^[#>*_`\s"“”']+|[#>*_`\s"“”']+$/g, "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 120);
+}
+
+function isPublishableGeneratedTitle(title: string, request: string) {
+  const normalize = (value: string) =>
+    value.toLowerCase().replace(/[^a-z0-9áéíóúñü]+/gi, " ").trim();
+  const normalizedTitle = normalize(title);
+  const normalizedRequest = normalize(request);
+  if (normalizedTitle.length < 12) return false;
+  if (normalizedTitle === normalizedRequest) return false;
+  if (normalizedRequest.startsWith(normalizedTitle) || normalizedTitle.startsWith(normalizedRequest)) {
+    return false;
+  }
+  return !/^(?:write|generate|create|draft|make|i need you to|please)\b/i.test(title.trim());
+}
+
+function makeFallbackGeneratedTitle(
+  text: string,
+  contentType: ContentItem["contentType"],
+  language: PropertyConfig["language"],
+) {
+  const source = contentType === "social_post" ? extractLinkedInDraft(text) : firstBodyParagraph(text);
+  const words = stripMarkdown(source).split(/\s+/).filter(Boolean).slice(0, 10).join(" ");
+  if (words) return words.replace(/[.:;,!?]+$/, "");
+  return language === "Spanish" ? "Nueva pieza editorial" : "New editorial piece";
+}
+
+function extractGeneratedExcerpt(
+  text: string,
+  contentType: ContentItem["contentType"],
+  language: PropertyConfig["language"],
+) {
+  const source = contentType === "social_post" ? extractLinkedInDraft(text) : firstBodyParagraph(text);
+  const clean = stripMarkdown(source).replace(/\s+/g, " ").trim();
+  if (!clean) {
+    return language === "Spanish"
+      ? "Una nueva pieza editorial generada para esta propiedad."
+      : "A new editorial piece generated for this property.";
+  }
+  if (clean.length <= 240) return clean;
+  const shortened = clean.slice(0, 237);
+  const lastBreak = Math.max(shortened.lastIndexOf(". "), shortened.lastIndexOf(" "));
+  return `${shortened.slice(0, lastBreak > 120 ? lastBreak : 237).trimEnd()}...`;
+}
+
+function extractLinkedInDraft(text: string) {
+  return text.match(
+    /(?:^|\n)(?:#{1,3}\s*)?(?:\*\*)?LinkedIn post draft(?:\*\*)?\s*:?[ \t]*\n([\s\S]*?)(?=\n(?:#{1,3}\s*)?(?:\*\*)?(?:Primary pain angle|Why this angle should resonate|Suggested CTA)(?:\*\*)?\s*:?[ \t]*(?:\n|$)|$)/i,
+  )?.[1]?.trim() ?? text;
+}
+
+function stripMarkdown(value: string) {
+  return value
+    .replace(/```[\s\S]*?```/g, " ")
+    .replace(/!\[[^\]]*\]\([^)]*\)/g, " ")
+    .replace(/\[([^\]]+)\]\([^)]*\)/g, "$1")
+    .replace(/^#{1,6}\s+/gm, "")
+    .replace(/[*_`>]/g, "")
+    .trim();
+}
+
+function makeGeneratedMetaDescription(
+  excerpt: string,
+  primaryKeyword: string,
+  language: PropertyConfig["language"],
+) {
+  const clean = excerpt.replace(/\s+/g, " ").trim();
+  const keywordIncluded = includesKeyword(clean, primaryKeyword);
+  const combined = keywordIncluded ? clean : `${primaryKeyword}: ${clean}`;
+  if (combined.length >= 120) {
+    return combined.length <= 155 ? combined : `${combined.slice(0, 152).trimEnd()}...`;
+  }
+  const ending = language === "Spanish"
+    ? "Ideas prácticas para tomar mejores decisiones y avanzar."
+    : "Practical guidance for clearer decisions and stronger execution.";
+  return `${combined} ${ending}`.slice(0, 155).trimEnd();
+}
+
 function makeMetaDescription(excerpt: string, primaryKeyword: string, language = "English") {
   const seed =
     language === "Spanish"
@@ -5248,6 +5381,7 @@ function buildContentInstructions(
       "Default the LinkedIn draft to 150–300 words unless the request specifies otherwise.",
       "Choose formats using this target mix across batches: about 45% carousel/document, 30% custom image with strong copy, 10% genuine polls, and 15% text-only thought leadership.",
       "For carousels, write a strong slide-one hook, one idea per slide, and a final takeaway or question. For image posts, provide a specific custom image concept. For polls, use genuine options without engagement bait.",
+      "Create a concise editorial title that captures the post's actual insight. The title is metadata for the content library, not the user's request. Never title a post with instructions such as Write a post, Generate, or I need you to.",
       "Return Markdown with exactly these labeled sections for each post: Title, Recommended format, Format-specific creative brief, LinkedIn post draft, Primary pain angle, Why this angle should resonate, Suggested CTA, if any.",
       "Return publishable content, not commentary about the guide or your writing process.",
     ].join("\n");
@@ -5257,6 +5391,7 @@ function buildContentInstructions(
     "You are the production writer for the Herzen Content Engine.",
     `Write in ${language}.`,
     "Return only the complete article in Markdown, beginning with one H1 heading.",
+    "Create the final publishable H1 yourself from the underlying idea. Never reuse the editorial request as the headline or begin with instructions such as Write, Generate, Create, or I need you to.",
     "Use an answer-first opening, clear H2 sections, practical recommendations, and a useful FAQ section.",
     "Stay faithful to the supplied brand context and never invent claims, credentials, statistics, or sources.",
     "Avoid generic AI phrasing, exaggerated promises, and commentary about the writing process.",
@@ -5264,20 +5399,22 @@ function buildContentInstructions(
 }
 
 function buildArticlePrompt({
-  title,
+  requestedTitle,
   request,
   keywords,
   toneOverride,
   brandContext,
 }: {
-  title: string;
+  requestedTitle: string;
   request: string;
   keywords: string[];
   toneOverride: string;
   brandContext: string;
 }) {
   return [
-    `TITLE: ${title}`,
+    requestedTitle
+      ? `FIXED TITLE: ${requestedTitle}`
+      : "TITLE TASK: Create a specific, human, publishable title from the underlying idea. Never use the editorial request itself as the title, and never begin the title with instructions such as Write, Generate, Create, or I need you to.",
     `EDITORIAL REQUEST: ${request}`,
     `SEO KEYWORDS: ${keywords.join(", ") || "none supplied"}`,
     `TONE OVERRIDE: ${toneOverride || "use the brand voice"}`,
@@ -5376,6 +5513,14 @@ function buildEvals({
         : "Voice, audience, terminology, and context docs are represented.",
       hard: true,
       category: "brand",
+    },
+    {
+      name: "Editorial title",
+      score: isPublishableGeneratedTitle(item.title, item.prompt) ? 95 : 35,
+      passed: isPublishableGeneratedTitle(item.title, item.prompt),
+      detail: "Title is generated as publishable copy and does not repeat the internal request.",
+      hard: true,
+      category: "quality",
     },
     {
       name: "SEO heading hierarchy",
@@ -5478,7 +5623,7 @@ function buildSocialPostEvals({
 }): EvalResult[] {
   const body = item.body;
   const normalized = body.toLowerCase();
-  const draftSection = body.match(/(?:^|\n)#{0,3}\s*linkedin post draft\s*\n([\s\S]*?)(?=\n#{0,3}\s*(?:primary pain angle|why this angle should resonate|suggested cta)|$)/i)?.[1] ?? body;
+  const draftSection = extractLinkedInDraft(body);
   const postWords = wordCount(draftSection);
   const hasRequiredSections = [
     "title",
@@ -5505,6 +5650,14 @@ function buildSocialPostEvals({
         : "The draft uses the active Herzen Co. LinkedIn strategy and avoids retired brands.",
       hard: true,
       category: "brand",
+    },
+    {
+      name: "Editorial title",
+      score: isPublishableGeneratedTitle(item.title, item.prompt) ? 95 : 35,
+      passed: isPublishableGeneratedTitle(item.title, item.prompt),
+      detail: "Title is generated as publishable copy and does not repeat the internal request.",
+      hard: true,
+      category: "quality",
     },
     {
       name: "LinkedIn output contract",
