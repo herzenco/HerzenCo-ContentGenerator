@@ -3,6 +3,7 @@ import "server-only";
 import { createHash } from "node:crypto";
 import { getProvider } from "@/lib/ai/providers";
 import type { AgentPrincipal } from "@/lib/agent/auth";
+import { triggerWebsiteBuild } from "@/lib/published-content";
 import { createSupabaseAdminClient } from "@/utils/supabase/admin";
 
 type ContentType = "article" | "newsletter" | "social_post";
@@ -87,6 +88,69 @@ export async function getAgentContent(id: string) {
   if (error) throw new Error(error.message);
   if (!data) throw new Error("content_not_found");
   return normalizeContentRecord(data, true);
+}
+
+export async function listWorkspaceContent(limit = 100) {
+  const admin = createSupabaseAdminClient();
+  const { data, error } = await admin
+    .from("content_items")
+    .select(
+      "id, type, status, quality_score, publish_at, published_at, created_at, updated_at, properties!inner(slug), content_versions(*)",
+    )
+    .order("created_at", { ascending: false })
+    .limit(Math.min(Math.max(limit, 1), 100));
+  if (error) throw new Error(error.message);
+  return (data ?? []).map((record) => normalizeContentRecord(record, true));
+}
+
+export async function publishWorkspaceContent(id: string, actorUserId: string) {
+  const content = await getAgentContent(id);
+  const latest = content.latestVersion;
+  if (!latest?.body_mdx) throw new Error("content_version_missing");
+  const admin = createSupabaseAdminClient();
+  const { data: property, error: propertyError } = await admin
+    .from("properties")
+    .select("id, slug, revalidate_url")
+    .eq("slug", content.property)
+    .single();
+  if (propertyError) throw new Error(propertyError.message);
+  const slug = slugify(latest.title);
+  const publishedAt = new Date().toISOString();
+  const { error: itemError } = await admin
+    .from("content_items")
+    .update({ status: "published", slug, published_at: publishedAt })
+    .eq("id", id);
+  if (itemError) throw new Error(itemError.message);
+  const { error: feedError } = await admin.from("published_content_feed").upsert(
+    {
+      id,
+      property_slug: property.slug,
+      type: content.type,
+      slug,
+      title: latest.title,
+      body_mdx: latest.body_mdx,
+      excerpt: latest.excerpt,
+      meta_title: String(latest.meta_title ?? latest.title).slice(0, 60),
+      meta_description: String(latest.meta_description ?? latest.excerpt).slice(0, 155),
+      faq: latest.faq ?? [],
+      json_ld: latest.json_ld ?? {},
+      hero_image_url: null,
+      published_at: publishedAt,
+      updated_at: publishedAt,
+    },
+    { onConflict: "id" },
+  );
+  if (feedError) throw new Error(feedError.message);
+  const { error: auditError } = await admin.from("agent_audit_log").insert({
+    actor_user_id: actorUserId,
+    action: "content.publish",
+    target_type: "content_item",
+    target_id: id,
+    metadata: { property: property.slug, source: "human_review" },
+  });
+  if (auditError) throw new Error(`audit_failed: ${auditError.message}`);
+  if (property.revalidate_url) await triggerWebsiteBuild(property.revalidate_url);
+  return { id, slug, property: property.slug, status: "published", publishedAt };
 }
 
 export async function generateAgentDraft(
@@ -319,6 +383,16 @@ function sanitizeSocialOutput(text: string) {
     .replace(/\s*—\s*([a-z])/g, (_match, letter: string) => `. ${letter.toUpperCase()}`)
     .replace(/\s*—\s*/g, ". ")
     .replace(/\.\s*\./g, ".");
+}
+
+function slugify(value: string) {
+  return value
+    .toLowerCase()
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 160);
 }
 
 function normalizeContentRecord(record: Record<string, unknown>, includeBody = false): AgentContentRecord {

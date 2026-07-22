@@ -109,6 +109,27 @@ interface ContentItem {
   imageStatus?: "off" | "skipped" | "queued" | "generated" | "failed";
   imageCheck?: string;
   servedModels?: ModelCallLog[];
+  serverBacked?: boolean;
+}
+
+interface WorkspaceContentRecord {
+  id: string;
+  property: string;
+  type: ContentItem["contentType"];
+  status: string;
+  qualityScore: number | null;
+  publishAt: string | null;
+  publishedAt: string | null;
+  createdAt: string;
+  latestVersion?: {
+    title?: string;
+    body_mdx?: string;
+    excerpt?: string;
+    meta_title?: string;
+    meta_description?: string;
+    prompt_snapshot?: string;
+    social_meta?: ContentItem["socialMeta"];
+  } | null;
 }
 
 interface EvalResult {
@@ -754,6 +775,34 @@ export function ContentEngineApp({ userEmail, role }: ContentEngineAppProps) {
   }, []);
 
   useEffect(() => {
+    const syncTimer = window.setTimeout(() => {
+      void fetch("/api/workspace/content")
+        .then(async (response) => {
+          if (!response.ok) return null;
+          return response.json() as Promise<{ data?: WorkspaceContentRecord[] }>;
+        })
+        .then((payload) => {
+          if (!payload?.data?.length) return;
+          const serverItems = payload.data
+            .map(workspaceRecordToContentItem)
+            .filter((item): item is ContentItem => item !== null);
+          setState((current) => {
+            const serverIds = new Set(serverItems.map((item) => item.id));
+            return {
+              ...current,
+              content: [
+                ...serverItems,
+                ...current.content.filter((item) => !serverIds.has(item.id)),
+              ],
+            };
+          });
+        })
+        .catch(() => undefined);
+    }, 150);
+    return () => window.clearTimeout(syncTimer);
+  }, []);
+
+  useEffect(() => {
     window.localStorage.setItem("herzen-home-options-open", String(homeOptionsOpen));
   }, [homeOptionsOpen]);
 
@@ -1026,13 +1075,25 @@ export function ContentEngineApp({ userEmail, role }: ContentEngineAppProps) {
     }
   }
 
-  function approveContent(id: string) {
+  async function approveContent(id: string) {
     if (role !== "admin" && role !== "publisher") {
       setToast("Editor access: submit drafts for review; publishing requires approval.");
       return;
     }
     const item = state.content.find((entry) => entry.id === id);
     if (!item) return;
+    if (item.serverBacked) {
+      try {
+        const response = await fetch(`/api/workspace/content/${item.id}/publish`, { method: "POST" });
+        const payload = (await response.json()) as { message?: string };
+        if (!response.ok) throw new Error(payload.message || "Publishing failed");
+        setContentItem(id, { status: "published", publishedAt: new Date().toISOString() });
+        setToast(item.property === "herzenco-social" ? "LinkedIn draft approved" : "Published");
+      } catch (error) {
+        setToast(error instanceof Error ? error.message : "Publishing failed");
+      }
+      return;
+    }
     const isFuture = item.publishAt
       ? new Date(item.publishAt).getTime() > Date.now()
       : false;
@@ -4785,6 +4846,45 @@ function normalizeState(saved: Partial<EngineState>): EngineState {
     gscConnected: saved.gscConnected ?? false,
     cron: saved.cron ?? initialState.cron,
     apiKeys: saved.apiKeys ?? initialState.apiKeys,
+  };
+}
+
+function workspaceRecordToContentItem(record: WorkspaceContentRecord): ContentItem | null {
+  const version = record.latestVersion;
+  if (!version?.title || !version.body_mdx) return null;
+  const statusMap: Record<string, ContentStatus> = {
+    draft: "drafting",
+    in_qa: "qa",
+    needs_review: "needs_review",
+    approved: "needs_review",
+    scheduled: "scheduled",
+    published: "published",
+    failed: "failed",
+  };
+  return {
+    id: record.id,
+    title: version.title,
+    property: record.property,
+    prompt: version.prompt_snapshot ?? "Created through the agent API",
+    contentType: record.type,
+    status: statusMap[record.status] ?? "needs_review",
+    source: "api",
+    keywords: [],
+    toneOverride: "Agent-generated from the active property context",
+    qualityScore: record.qualityScore,
+    publishAt: record.publishAt ?? "",
+    publishedAt: record.publishedAt ?? "",
+    createdAt: record.createdAt,
+    excerpt: version.excerpt ?? "",
+    metaTitle: version.meta_title ?? version.title.slice(0, 60),
+    metaDescription: version.meta_description ?? (version.excerpt ?? "").slice(0, 155),
+    evals: [],
+    body: version.body_mdx,
+    socialMeta: version.social_meta,
+    imageStatus: "off",
+    imageCheck: "Hero image generation is off for this property.",
+    servedModels: [],
+    serverBacked: true,
   };
 }
 
