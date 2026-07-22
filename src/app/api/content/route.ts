@@ -1,5 +1,9 @@
 import { listPublishedContent, savePublishedContent, triggerWebsiteBuild } from "@/lib/published-content";
 import { createServerSupabaseClient } from "@/utils/supabase/server";
+import {
+  isContentTypeAllowedForProperty,
+  propertySurfaceForSlug,
+} from "@/lib/property-content-types";
 import { z } from "zod";
 
 export const runtime = "nodejs";
@@ -50,6 +54,17 @@ export async function POST(request: Request) {
   if (!parsed.success) {
     return Response.json(
       { error: "invalid_request", issues: parsed.error.flatten().fieldErrors },
+      { status: 400 },
+    );
+  }
+  if (
+    !isContentTypeAllowedForProperty(
+      { surface: propertySurfaceForSlug(parsed.data.property) },
+      parsed.data.contentType,
+    )
+  ) {
+    return Response.json(
+      { error: "content_type_not_allowed_for_property" },
       { status: 400 },
     );
   }

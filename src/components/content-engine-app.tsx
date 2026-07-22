@@ -28,6 +28,12 @@ import {
 import { FormEvent, ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { createClient } from "@/utils/supabase/client";
 import { humanizeCode, humanizeEval, primaryReviewReason } from "@/lib/humanize";
+import {
+  defaultContentTypeForProperty,
+  isContentTypeAllowedForProperty,
+  normalizeContentTypeForProperty,
+  type PropertySurface,
+} from "@/lib/property-content-types";
 
 type View = "home" | "content" | "properties" | "settings";
 type ContentMode = "list" | "calendar" | "ideas";
@@ -62,6 +68,7 @@ interface PropertyConfig {
   slug: PropertySlug;
   name: string;
   domain: string;
+  surface: PropertySurface;
   language: "English" | "Spanish";
   threshold: number;
   active: boolean;
@@ -433,6 +440,7 @@ const initialState: EngineState = {
       slug: "herzenco",
       name: "Herzen Co.",
       domain: "herzenco.co",
+      surface: "website",
       language: "English",
       threshold: 75,
       active: true,
@@ -442,6 +450,7 @@ const initialState: EngineState = {
       slug: "humanismo-evolutivo",
       name: "Humanismo Evolutivo",
       domain: "humanismoevolutivo.com",
+      surface: "website",
       language: "Spanish",
       threshold: 75,
       active: true,
@@ -451,6 +460,7 @@ const initialState: EngineState = {
       slug: "herzenco-social",
       name: "Social Media Content",
       domain: "LinkedIn · Herzen Co.",
+      surface: "social",
       language: "English",
       threshold: 100,
       active: true,
@@ -886,6 +896,11 @@ export function ContentEngineApp({ userEmail }: ContentEngineAppProps) {
       return;
     }
     const property = state.properties.find((entry) => entry.slug === form.property);
+    if (!property) {
+      setToast("Property not found");
+      return;
+    }
+    const contentType = normalizeContentTypeForProperty(property, form.contentType);
     const visualProfile = getVisualProfileCompleteness(state, form.property);
     const wantsHeroImage = Boolean(
       property?.imagesEnabled && form.generateHeroImage,
@@ -902,7 +917,7 @@ export function ContentEngineApp({ userEmail }: ContentEngineAppProps) {
       title,
       property: form.property,
       prompt: form.prompt.trim(),
-      contentType: form.contentType,
+      contentType,
       status: "drafting",
       source: "quick_generate",
       keywords,
@@ -939,8 +954,8 @@ export function ContentEngineApp({ userEmail }: ContentEngineAppProps) {
     setForm({
       ...emptyForm,
       property: form.property,
-      contentType: form.property === "herzenco-social" ? "social_post" : "article",
-      skipAutoPublish: form.property === "herzenco-social",
+      contentType: defaultContentTypeForProperty(property),
+      skipAutoPublish: property.surface === "social",
       generateHeroImage: Boolean(property?.imagesEnabled),
     });
     setToast("Draft job started");
@@ -948,7 +963,7 @@ export function ContentEngineApp({ userEmail }: ContentEngineAppProps) {
     const draftModel = resolveServedModel(state, {
       task: "draft",
       property: form.property,
-      contentType: form.contentType,
+      contentType,
       language: property?.language ?? "English",
     });
 
@@ -1256,13 +1271,22 @@ export function ContentEngineApp({ userEmail }: ContentEngineAppProps) {
     setState((current) => ({
       ...current,
       autopilotSettings: current.autopilotSettings.map((entry) =>
-        entry.property === property
-          ? {
+        entry.property === property ? (() => {
+          const propertyConfig = current.properties.find((item) => item.slug === property);
+          const nextContentType = propertyConfig
+            ? normalizeContentTypeForProperty(
+                propertyConfig,
+                patch.contentType ?? entry.contentType,
+              )
+            : entry.contentType;
+          return {
               ...entry,
               ...patch,
+              contentType: nextContentType,
               piecesPerCycle: Math.min(5, Math.max(1, patch.piecesPerCycle ?? entry.piecesPerCycle)),
               maxQueued: Math.max(1, patch.maxQueued ?? entry.maxQueued),
-            }
+            };
+        })()
           : entry,
       ),
     }));
@@ -1636,10 +1660,9 @@ function HomeView({
                   onChange({
                     ...form,
                     property: property.slug,
-                    contentType:
-                      property.slug === "herzenco-social" ? "social_post" : form.contentType,
+                    contentType: normalizeContentTypeForProperty(property, form.contentType),
                     skipAutoPublish:
-                      property.slug === "herzenco-social" ? true : form.skipAutoPublish,
+                      property.surface === "social" ? true : false,
                     generateHeroImage: Boolean(property.imagesEnabled),
                   })
                 }
@@ -1703,9 +1726,14 @@ function HomeView({
                   }
                   value={form.contentType}
                 >
-                  <option value="article">Article</option>
-                  <option value="newsletter">Newsletter</option>
-                  <option value="social_post">Social post</option>
+                  {selectedProperty?.surface === "social" ? (
+                    <option value="social_post">Social post</option>
+                  ) : (
+                    <>
+                      <option value="article">Article</option>
+                      <option value="newsletter">Newsletter</option>
+                    </>
+                  )}
                 </select>
               </Field>
               <Field label="Publish date">
@@ -2113,6 +2141,10 @@ function QuickGenerateView({
                   onChange({
                     ...form,
                     property: event.target.value as PropertySlug,
+                    contentType: nextProperty
+                      ? normalizeContentTypeForProperty(nextProperty, form.contentType)
+                      : form.contentType,
+                    skipAutoPublish: nextProperty?.surface === "social",
                     generateHeroImage: Boolean(nextProperty?.imagesEnabled),
                   });
                 }}
@@ -2136,9 +2168,14 @@ function QuickGenerateView({
                 }
                 value={form.contentType}
               >
-                <option value="article">Article</option>
-                <option value="newsletter">Newsletter</option>
-                <option value="social_post">Social post</option>
+                {selectedProperty?.surface === "social" ? (
+                  <option value="social_post">Social post</option>
+                ) : (
+                  <>
+                    <option value="article">Article</option>
+                    <option value="newsletter">Newsletter</option>
+                  </>
+                )}
               </select>
             </Field>
           </div>
@@ -2768,6 +2805,7 @@ function PropertiesView({
       slug,
       name: name || domain || slug,
       domain,
+      surface: "website",
       language: wizard.language,
       threshold: wizard.threshold,
       active: true,
@@ -3469,9 +3507,14 @@ function PropertiesView({
                     }
                     value={autopilotSetting.contentType}
                   >
-                    <option value="article">Article</option>
-                    <option value="newsletter">Newsletter</option>
-                    <option value="social_post">Social post</option>
+                    {selectedProperty.surface === "social" ? (
+                      <option value="social_post">Social post</option>
+                    ) : (
+                      <>
+                        <option value="article">Article</option>
+                        <option value="newsletter">Newsletter</option>
+                      </>
+                    )}
                   </select>
                 </Field>
                 <Field label="Max queued">
@@ -4647,7 +4690,11 @@ function normalizeState(saved: Partial<EngineState>): EngineState {
   const properties = [
     ...savedProperties,
     ...initialState.properties.filter((property) => !savedPropertySlugs.has(property.slug)),
-  ].map((property) => ({ ...property, imagesEnabled: property.imagesEnabled ?? false }));
+  ].map((property) => ({
+    ...property,
+    surface: property.surface ?? (property.slug === "herzenco-social" ? "social" : "website"),
+    imagesEnabled: property.imagesEnabled ?? false,
+  }));
   const brands = properties.map((property) => {
     const savedBrand = saved.brands?.find((brand) => brand.property === property.slug);
     const seedBrand = initialState.brands.find((brand) => brand.property === property.slug);
@@ -4673,12 +4720,17 @@ function normalizeState(saved: Partial<EngineState>): EngineState {
 
   return {
     properties,
-    content: (saved.content ?? initialState.content).map((item) => ({
-      ...item,
-      imageStatus: item.imageStatus ?? "off",
-      imageCheck: item.imageCheck ?? "Hero image generation is off for this property.",
-      servedModels: item.servedModels ?? [],
-    })),
+    content: (saved.content ?? initialState.content)
+      .filter((item) => {
+        const property = properties.find((entry) => entry.slug === item.property);
+        return property ? isContentTypeAllowedForProperty(property, item.contentType) : false;
+      })
+      .map((item) => ({
+        ...item,
+        imageStatus: item.imageStatus ?? "off",
+        imageCheck: item.imageCheck ?? "Hero image generation is off for this property.",
+        servedModels: item.servedModels ?? [],
+      })),
     topics: saved.topics ?? initialState.topics,
     brands,
     contextDocs: mergeContextDocs(saved.contextDocs ?? [], initialState.contextDocs),
@@ -4695,13 +4747,18 @@ function normalizeState(saved: Partial<EngineState>): EngineState {
       const savedSetting = saved.autopilotSettings?.find(
         (setting) => setting.property === property.slug,
       );
+      const defaultSetting = makeDefaultAutopilotSetting(property.slug);
       return {
-        ...makeDefaultAutopilotSetting(property.slug),
+        ...defaultSetting,
         ...savedSetting,
         property: property.slug,
+        contentType: normalizeContentTypeForProperty(
+          property,
+          savedSetting?.contentType ?? defaultSetting.contentType,
+        ),
         publishDays: savedSetting?.publishDays?.length
           ? savedSetting.publishDays
-          : makeDefaultAutopilotSetting(property.slug).publishDays,
+          : defaultSetting.publishDays,
       };
     }),
     autopilotWarnings: saved.autopilotWarnings ?? initialState.autopilotWarnings,
