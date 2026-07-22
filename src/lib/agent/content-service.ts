@@ -289,9 +289,17 @@ function buildGenerationPrompt(input: GenerateDraftInput, context: Awaited<Retur
 }
 
 function extractGeneratedTitle(text: string, contentType: ContentType) {
+  const labeledTitle = text.match(
+    /(?:^|\n)\s*(?:#{1,3}\s*)?(?:\d+[.)]\s*)?\*{0,2}Title\s*:?\*{0,2}\s*(?:\n\s*)?([^\n]+)/i,
+  )?.[1];
+  const headingTitle = text.match(/^#{1,3}\s+(.+)$/m)?.[1];
+  const firstMeaningfulLine = text
+    .split("\n")
+    .map((line) => line.replace(/^\s*(?:\d+[.)]\s*)?/, "").trim())
+    .find((line) => line.length >= 8 && !/^(?:recommended format|format-specific creative brief|linkedin post draft)\s*:?$/i.test(line));
   const candidate = contentType === "social_post"
-    ? text.match(/(?:^|\n)(?:#{1,3}\s*)?(?:\*\*)?Title(?::\*\*|\*\*:|\s*:)[ \t]*([^\n]+)/i)?.[1]
-    : text.match(/^#\s+(.+)$/m)?.[1];
+    ? labeledTitle || headingTitle || firstMeaningfulLine
+    : headingTitle || labeledTitle || firstMeaningfulLine;
   return candidate?.replace(/^\*+|\*+$/g, "").trim().slice(0, 240) ?? "";
 }
 
