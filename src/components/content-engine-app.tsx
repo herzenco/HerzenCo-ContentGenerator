@@ -343,6 +343,10 @@ Position Herzen Co. as an embedded operator who personally leads the work and ow
 ## Content model
 Open with a real, specific founder problem. Clarify why it happens. Diagnose or reframe it. Offer a practical fix, lens, operating principle, or takeaway. End cleanly without manufactured inspiration. The preferred underlying model is: founder with a recognizable problem, followed by a usable solution.
 
+Make the problem felt before explaining it. Put one concrete operating moment in the opening 50 words: priorities changing midweek, engineers waiting on a decision, a founder answering Slack all day, requirements being clarified for the third time, or a release moving while everyone reports being busy. Use details that can be observed, not invented client stories.
+
+The sharpest usable reframe is often more valuable than a complete explanation. State it plainly, then earn it with the example. Cut 20–30% from a safe first draft. Prefer blunt, compact sentences over polished B2B transitions. A post should sound like someone who has been inside the problem, not someone summarizing a category.
+
 Vary posts across pain and diagnosis, execution lessons, founder reframes, operating principles, team dysfunction observations, and practical how-we-think posts. Test angles and iterate from performance rather than treating one message as permanently correct.
 
 ## Format mix and creative direction
@@ -360,6 +364,8 @@ Target 3–5 posts per week, with Tuesday through Thursday mornings as the prefe
 ## Voice
 Conversational, confident, human, practical, lightly opinionated, credible, direct, and useful. Sound hands-dirty and embedded in the work. Use mostly “we,” while allowing “I” when it adds ownership, conviction, or credibility. Make it implicitly clear that Herzen personally leads the work. Prefer plain language to jargon and practical specificity to abstraction.
 
+Avoid familiar B2B filler such as “execution glue,” “context switching,” “business intent,” “drive alignment,” “unlock value,” and “move the needle.” Terms such as ownership and execution are allowed only when the surrounding sentence shows what they mean in practice. Do not spend several paragraphs warming up to the point.
+
 ## Hard constraints
 - No emojis.
 - Default to no hashtags; use no more than three when strategically useful or explicitly requested.
@@ -372,9 +378,11 @@ Conversational, confident, human, practical, lightly opinionated, credible, dire
 - Never invent claims, metrics, client stories, or credentials.
 - Keep build, development, and site work in the background unless explicitly requested.
 - Keep paragraphs readable and natural.
+- Include at least one concrete, lived operational example near the beginning.
+- Do not end with a polished marketing CTA. End on the reframe, a clean punch, or a genuinely useful question.
 
 ## Output contract
-Default to one 150–300 word LinkedIn post unless the request asks for a batch or another length. Choose formats according to the target mix. For each post provide:
+Default to one 120–220 word LinkedIn post unless the request asks for a batch or another length. Choose formats according to the target mix. For each post provide:
 1. Title
 2. Recommended format
 3. Format-specific creative brief (carousel slide outline, image concept, poll options, or text structure)
@@ -519,19 +527,20 @@ const initialState: EngineState = {
     {
       property: "herzenco-social",
       voice:
-        "Founder-facing, conversational, confident, human, direct, practical, lightly opinionated, and useful. Sound like an embedded operator who is inside the work and owns execution, never like a consultant observing from outside. Use mostly we, with I only when it adds real ownership or conviction. Keep paragraphs natural and the language plain.",
+        "Founder-facing, conversational, confident, human, direct, practical, lightly opinionated, and useful. Sound like an embedded operator who is inside the work and owns execution, never like a consultant observing from outside. Use mostly we, with I only when it adds real ownership or conviction. Open bluntly, show a concrete operating moment in the first 50 words, and get to the reframe quickly. Keep paragraphs natural, sentences compact, and the language plain.",
       audience:
         "Founders at funded startups and established founder-led companies with digital products, especially non-technical founders dealing with product and engineering complexity, shifting priorities, missing ownership, and stakeholder/developer drift.",
       pillars:
-        "Teams shipping chaos instead of progress; stakeholder and developer drift; missing ownership of digital work; shifting priorities; founders acting as translator and execution glue; output without business progress; execution problems misdiagnosed as developer problems; embedded project management; fractional product leadership; product strategy and execution",
+        "Teams shipping chaos instead of progress; stakeholder and developer drift; missing ownership of digital work; shifting priorities; founders forced to translate priorities, chase updates, and clarify requirements; output without business progress; execution problems misdiagnosed as developer problems; embedded project management; fractional product leadership; product strategy and execution",
       banned:
-        "Xyren or Xelerate; emojis; more than three hashtags or decorative hashtag stuffing; em dashes; cheesy hooks; fake stories; unsupported claims, metrics, credentials, or client outcomes; hot-take framing without substance; corporate language; consultant tone; dev-shop positioning; generic productivity advice; fluff; excessive formatting; leading with website, build, or development work; video or LinkedIn Live",
+        "Xyren or Xelerate; emojis; more than three hashtags or decorative hashtag stuffing; em dashes; cheesy hooks; fake stories; unsupported claims, metrics, credentials, or client outcomes; hot-take framing without substance; corporate language; consultant tone; dev-shop positioning; generic productivity advice; fluff; excessive formatting; long abstract setup; polished marketing CTAs; execution glue; context switching; business intent; drive alignment; unlock value; move the needle; leading with website, build, or development work; video or LinkedIn Live",
       cta:
         "Use no CTA when the insight lands cleanly. When useful, end with a low-pressure founder-facing question or an invitation to compare how execution ownership works inside their team. Never force a sales pitch.",
       styleExamples: [
-        "Lead with a founder problem that feels immediately familiar, explain the operating failure underneath it, then offer one practical change the team can use this week.",
-        "The team can be shipping every week and still not be making progress. Output is not the same as execution when priorities move, decisions disappear, and nobody owns the path from stakeholder intent to what engineering builds.",
-        "Keep the translator role implicit. Show that we understand where business intent gets lost and how an embedded owner closes the gap.",
+        "Most founders do not need another productivity tool. They need someone who actually owns follow-through.",
+        "If you are translating priorities, chasing updates, clarifying requirements, and checking whether anything moved, you are not leading the work. You are holding it together by hand.",
+        "On Tuesday the team changes priorities. By Thursday engineers are waiting on two decisions, and the founder has spent the day answering Slack instead of steering the company. That is not a motivation problem. It is an ownership gap.",
+        "Keep the translator role implicit. Show where a founder's decision gets diluted between the request and what engineering ships, then show how one accountable operator closes that gap.",
       ],
       defaultCtas: [],
       visualStyleDescription: "",
@@ -5387,12 +5396,15 @@ function buildContentInstructions(
       "You are writing LinkedIn content for Herzen Co.",
       `Write in ${language}.`,
       "Treat the supplied LinkedIn strategy guide as the source of truth.",
-      "Write directly to founders. Lead with a specific execution problem, diagnose why it happens, offer a practical fix or reframe, and end cleanly.",
+      "Write directly to founders. Open bluntly with a specific execution problem, diagnose why it happens, offer one practical fix or reframe, and end cleanly.",
+      "Within the first 50 words, show one observable operating moment such as priorities changing midweek, engineers waiting on a decision, a founder answering Slack all day, requirements being clarified repeatedly, or a release slipping while everyone stays busy. Never fabricate a client story.",
       "Sound like an embedded operator who owns execution, not a consultant, dev shop, or productivity creator.",
       "Use mostly we. Use I only when it adds genuine ownership or conviction.",
       "Use no emojis, em dashes, cheesy hooks, fake stories, fluff, unsupported claims, or excessive formatting. Default to zero hashtags and never use more than three.",
       "Never mention Xyren or Xelerate. Keep build, development, and website work in the background unless explicitly requested.",
-      "Default the LinkedIn draft to 150–300 words unless the request specifies otherwise.",
+      "Default the LinkedIn draft to 120–220 words unless the request specifies otherwise. Cut safe explanations and get to the central reframe quickly.",
+      "Avoid generic B2B language, including execution glue, context switching, business intent, drive alignment, unlock value, and move the needle. Use ownership and execution only when the surrounding sentence makes them concrete.",
+      "End on a clean punch, the central reframe, or a genuinely useful question. Do not add a polished marketing CTA just because the output contract includes a CTA field; write None when no CTA improves the post.",
       "Choose formats using this target mix across batches: about 45% carousel/document, 30% custom image with strong copy, 10% genuine polls, and 15% text-only thought leadership.",
       "For carousels, write a strong slide-one hook, one idea per slide, and a final takeaway or question. For image posts, provide a specific custom image concept. For polls, use genuine options without engagement bait.",
       "Create a concise editorial title that captures the post's actual insight. The title is metadata for the content library, not the user's request. Never title a post with instructions such as Write a post, Generate, or I need you to.",
@@ -5653,6 +5665,9 @@ function buildSocialPostEvals({
   const mentionsRetiredBrand = /\b(?:xyren|xelerate)\b/i.test(body);
   const speaksToFounder = /\b(founder|your team|you|your)\b/i.test(draftSection);
   const executionSpecific = /\b(execution|ship|shipping|stakeholder|engineering|developer|priority|priorities|owner|ownership|progress)\b/i.test(draftSection);
+  const openingWords = draftSection.split(/\s+/).slice(0, 50).join(" ");
+  const hasConcreteOpening = /\b(?:monday|tuesday|wednesday|thursday|friday|midweek|slack|standup|meeting|release|deadline|ticket|requirement|approval|decision|engineer|developer|priority|priorities|update|waiting|chasing|clarifying|answering|blocked|slipped|moved)\b/i.test(openingWords);
+  const genericB2bPhrases = draftSection.match(/\b(?:execution glue|context switching|business intent|drive alignment|unlock value|move the needle)\b/gi) ?? [];
 
   return [
     {
@@ -5683,9 +5698,27 @@ function buildSocialPostEvals({
     },
     {
       name: "LinkedIn length",
-      score: postWords >= 150 && postWords <= 300 ? 94 : 65,
-      passed: postWords >= 150 && postWords <= 300,
-      detail: `${postWords} words in the post draft; target is 150–300 unless the request overrides it.`,
+      score: postWords >= 120 && postWords <= 220 ? 94 : 65,
+      passed: postWords >= 120 && postWords <= 220,
+      detail: `${postWords} words in the post draft; target is 120–220 unless the request overrides it.`,
+      category: "quality",
+    },
+    {
+      name: "Concrete opening",
+      score: hasConcreteOpening ? 95 : 58,
+      passed: hasConcreteOpening,
+      detail: "The first 50 words should show an observable operating moment before explaining the diagnosis.",
+      hard: true,
+      category: "quality",
+    },
+    {
+      name: "Plainspoken edge",
+      score: genericB2bPhrases.length === 0 ? 95 : 52,
+      passed: genericB2bPhrases.length === 0,
+      detail:
+        genericB2bPhrases.length === 0
+          ? "Avoids the familiar B2B phrases that make generated thought leadership blend in."
+          : `Replace generic phrasing: ${Array.from(new Set(genericB2bPhrases.map((phrase) => phrase.toLowerCase()))).join(", ")}.`,
       category: "quality",
     },
     {
