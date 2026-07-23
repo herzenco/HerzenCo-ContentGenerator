@@ -62,7 +62,7 @@ export async function POST(request: Request) {
     "generate_draft",
     {
       title: "Generate draft",
-      description: "Generate a brand-grounded draft and save it in Needs Review. This never publishes content.",
+      description: "Generate a brand-grounded draft, save it in Needs Review, and return its reviewUrl. This never publishes content.",
       inputSchema: z.object({
         property: z.string().min(1),
         prompt: z.string().min(1).max(100_000),

@@ -30,6 +30,7 @@ interface AgentContentVersion {
 
 interface AgentContentRecord {
   id: string;
+  reviewUrl: string;
   property: string;
   type: ContentType;
   status: string;
@@ -430,6 +431,7 @@ function normalizeContentRecord(record: Record<string, unknown>, includeBody = f
   const propertyRecord = Array.isArray(record.properties) ? record.properties[0] : record.properties;
   return {
     id: String(record.id),
+    reviewUrl: reviewUrlForContent(String(record.id)),
     property: propertyRecord && typeof propertyRecord === "object" && "slug" in propertyRecord ? String(propertyRecord.slug) : "",
     type: String(record.type) as ContentType,
     status: String(record.status),
@@ -443,6 +445,11 @@ function normalizeContentRecord(record: Record<string, unknown>, includeBody = f
     version: latest?.version ?? null,
     ...(includeBody ? { latestVersion: latest, versions } : {}),
   };
+}
+
+function reviewUrlForContent(id: string) {
+  const baseUrl = process.env.ENGINE_BASE_URL?.trim() || "https://content.herzenco.co";
+  return `${baseUrl.replace(/\/$/, "")}/review/${encodeURIComponent(id)}`;
 }
 
 async function auditAgent(

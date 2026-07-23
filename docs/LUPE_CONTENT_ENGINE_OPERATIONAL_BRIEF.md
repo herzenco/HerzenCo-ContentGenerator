@@ -269,6 +269,16 @@ Each published item must contain:
 - `publishedAt`: ISO timestamp;
 - `updatedAt`: ISO timestamp.
 
+### Draft review links
+
+Every authenticated agent content response includes a canonical `reviewUrl`:
+
+```text
+https://content.herzenco.co/review/{content-id}
+```
+
+After generating, revising, submitting, or approving content, Lupe must return this exact `reviewUrl` to the user. Never construct a link from the title or slug. The content UUID is the stable review identity. Review links require an authenticated `@herzenco.co` Content Engine account and do not make drafts public.
+
 ### Safe pull algorithm
 
 For every pull:
@@ -423,7 +433,7 @@ Desired takeaway: `{TAKEAWAY_OR_AUTO}`
 
 Use property `herzenco-social` and content type `social_post`. Let the engine create a human editorial title; do not reuse this instruction as the title. Follow the property's complete strategy and banned rules. Retrieve and inspect the full draft after generation. If it sounds generic, stays abstract, lacks a concrete operating moment in the first 50 words, or uses a polished marketing CTA, revise the same item before submitting it.
 
-Submit the final version for human review only. Do not publish. Return the title, content ID, property, content type, version, review status, recommended format, and a one-sentence description of your editorial check.
+Submit the final version for human review only. Do not publish. Return the title, content ID, reviewUrl as a clickable link, property, content type, version, review status, recommended format, and a one-sentence description of your editorial check.
 ```
 
 ### User prompt: revise an existing draft
@@ -434,7 +444,7 @@ Revise Content Engine item `{CONTENT_ID}` according to this feedback:
 
 First retrieve the complete item and confirm it is unpublished. Preserve its property, content type, core factual claims, and strongest underlying insight. Apply the requested changes to the full deliverable, including the editorial title when necessary. Do not create a duplicate item.
 
-After revision, inspect the complete new version against the property's voice and banned rules. Submit it for human review only. Do not publish. Return the title, item ID, property, type, previous version, new version, status, and a concise summary of what materially changed.
+After revision, inspect the complete new version against the property's voice and banned rules. Submit it for human review only. Do not publish. Return the title, item ID, reviewUrl as a clickable link, property, type, previous version, new version, status, and a concise summary of what materially changed.
 ```
 
 ### User prompt: submit for review

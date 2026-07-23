@@ -735,11 +735,12 @@ const emptyForm: QuickGenerateForm = {
 };
 
 interface ContentEngineAppProps {
+  initialReviewId?: string;
   userEmail: string;
   role: AppRole;
 }
 
-export function ContentEngineApp({ userEmail, role }: ContentEngineAppProps) {
+export function ContentEngineApp({ initialReviewId, userEmail, role }: ContentEngineAppProps) {
   const [state, setState] = useState<EngineState>(initialState);
   const [activeView, setActiveView] = useState<View>("home");
   const [contentMode, setContentMode] = useState<ContentMode>("list");
@@ -787,6 +788,11 @@ export function ContentEngineApp({ userEmail, role }: ContentEngineAppProps) {
           const serverItems = payload.data
             .map(workspaceRecordToContentItem)
             .filter((item): item is ContentItem => item !== null);
+          if (initialReviewId && serverItems.some((item) => item.id === initialReviewId)) {
+            setSelectedContentId(initialReviewId);
+            setActiveView("content");
+            setContentMode("list");
+          }
           setState((current) => {
             const serverIds = new Set(serverItems.map((item) => item.id));
             return {
@@ -801,7 +807,7 @@ export function ContentEngineApp({ userEmail, role }: ContentEngineAppProps) {
         .catch(() => undefined);
     }, 150);
     return () => window.clearTimeout(syncTimer);
-  }, []);
+  }, [initialReviewId]);
 
   useEffect(() => {
     window.localStorage.setItem("herzen-home-options-open", String(homeOptionsOpen));
