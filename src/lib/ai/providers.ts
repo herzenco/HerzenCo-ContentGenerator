@@ -9,6 +9,7 @@ export type TextGenerationRequest = {
   model: string;
   prompt: string;
   instructions?: string;
+  jsonSchema?: Record<string, unknown>;
   maxOutputTokens?: number;
   timeoutMs?: number;
 };
@@ -92,6 +93,16 @@ export class AnthropicProvider implements ContentAiProvider {
       model: request.model,
       max_tokens: request.maxOutputTokens ?? DEFAULT_MAX_OUTPUT_TOKENS,
       ...(request.instructions ? { system: request.instructions } : {}),
+      ...(request.jsonSchema
+        ? {
+            output_config: {
+              format: {
+                type: "json_schema" as const,
+                schema: request.jsonSchema,
+              },
+            },
+          }
+        : {}),
       messages: [{ role: "user", content: request.prompt }],
     });
     const text = response.content

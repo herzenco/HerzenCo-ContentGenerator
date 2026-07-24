@@ -493,10 +493,41 @@ async function runAnthropicQa(input: {
   const model = process.env.ANTHROPIC_QA_MODEL?.trim() || "claude-sonnet-5";
   const result = await provider.generateText({
     model,
+    jsonSchema: {
+      type: "object",
+      additionalProperties: false,
+      required: ["qualityScore", "metaTitle", "metaDescription", "ogTitle", "keywords", "checks"],
+      properties: {
+        qualityScore: { type: "integer" },
+        metaTitle: { type: "string" },
+        metaDescription: { type: "string" },
+        ogTitle: { type: "string" },
+        keywords: {
+          type: "array",
+          items: { type: "string" },
+        },
+        checks: {
+          type: "array",
+          items: {
+            type: "object",
+            additionalProperties: false,
+            required: ["name", "score", "passed", "hard", "detail"],
+            properties: {
+              name: { type: "string" },
+              score: { type: "integer" },
+              passed: { type: "boolean" },
+              hard: { type: "boolean" },
+              detail: { type: "string" },
+            },
+          },
+        },
+      },
+    },
     instructions: [
       "You are the independent senior editor and QA reviewer for the Herzen Content Engine.",
       "Evaluate the OpenAI-generated draft against the supplied brand context.",
       "Be critical and specific. Do not rewrite the draft.",
+      "Keep every check detail under 300 characters.",
       "Return valid JSON only, without Markdown fences.",
     ].join("\n"),
     prompt: [
@@ -509,7 +540,7 @@ async function runAnthropicQa(input: {
 {"qualityScore":0,"metaTitle":"","metaDescription":"","ogTitle":"","keywords":[""],"checks":[{"name":"Brand alignment","score":0,"passed":false,"hard":true,"detail":""},{"name":"Writing quality","score":0,"passed":false,"hard":true,"detail":""},{"name":"SEO readiness","score":0,"passed":false,"hard":false,"detail":""},{"name":"AEO readiness","score":0,"passed":false,"hard":false,"detail":""},{"name":"Factual safety","score":0,"passed":false,"hard":true,"detail":""}]}
 Scores are integers 0-100. Passed means 75 or higher. For social posts, SEO/AEO are non-blocking and should explain channel relevance. Meta title max 60 characters. Meta description max 155 characters. Supply 3-6 useful keywords.`,
     ].join("\n\n"),
-    maxOutputTokens: 2_000,
+    maxOutputTokens: 4_000,
   });
   const parsed = JSON.parse(result.text.trim().replace(/^```json\s*/i, "").replace(/\s*```$/, "")) as Omit<QaResult, "model">;
   const checks = Array.isArray(parsed.checks) ? parsed.checks.slice(0, 8).map((check) => ({
