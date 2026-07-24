@@ -875,7 +875,7 @@ export function ContentEngineApp({ initialReviewId, userEmail, role }: ContentEn
           return response.json() as Promise<{ data?: WorkspaceContentRecord[] }>;
         })
         .then((payload) => {
-          if (!payload?.data?.length) return;
+          if (!payload?.data) return;
           const serverItems = payload.data
             .map(workspaceRecordToContentItem)
             .filter((item): item is ContentItem => item !== null);
@@ -890,7 +890,9 @@ export function ContentEngineApp({ initialReviewId, userEmail, role }: ContentEn
               ...current,
               content: [
                 ...serverItems,
-                ...current.content.filter((item) => !serverIds.has(item.id)),
+                ...current.content.filter(
+                  (item) => !item.serverBacked && !serverIds.has(item.id),
+                ),
               ],
             };
           });
