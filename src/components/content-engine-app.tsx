@@ -857,7 +857,10 @@ export function ContentEngineApp({ initialReviewId, userEmail, role }: ContentEn
     const restoreTimer = window.setTimeout(() => {
       const saved = window.localStorage.getItem(storageKey);
       if (!saved) return;
-      const restored = normalizeState(JSON.parse(saved) as Partial<EngineState>);
+      const restored: EngineState = {
+        ...normalizeState(JSON.parse(saved) as Partial<EngineState>),
+        content: [],
+      };
       setState(restored);
       if (!initialReviewId) setSelectedContentId(restored.content[0]?.id ?? "");
       storageReady.current = true;
@@ -911,7 +914,10 @@ export function ContentEngineApp({ initialReviewId, userEmail, role }: ContentEn
       storageReady.current = true;
       return;
     }
-    window.localStorage.setItem(storageKey, JSON.stringify(state));
+    window.localStorage.setItem(
+      storageKey,
+      JSON.stringify({ ...state, content: [] }),
+    );
   }, [state]);
 
   const selectedContent = useMemo(
