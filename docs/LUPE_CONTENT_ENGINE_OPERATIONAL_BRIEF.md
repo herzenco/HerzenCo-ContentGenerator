@@ -71,8 +71,10 @@ Expected MCP tools:
 - `list_properties`
 - `list_content`
 - `get_content`
+- `list_comments`
 - `generate_draft`
 - `revise_draft`
+- `revise_from_comments`
 - `submit_for_review`
 - `approve_content`
 
@@ -92,8 +94,10 @@ Content-Type: application/json
 | List properties | `GET https://content.herzenco.co/api/agent/properties` | `content:read` |
 | List content | `GET https://content.herzenco.co/api/agent/content?property={slug}&status={status}&limit={1-100}` | `content:read` |
 | Get complete item | `GET https://content.herzenco.co/api/agent/content/{id}` | `content:read` |
+| List review comments | `GET https://content.herzenco.co/api/agent/content/{id}/comments` | `content:read` |
 | Generate draft | `POST https://content.herzenco.co/api/agent/content` | `content:write` |
 | Revise draft | `POST https://content.herzenco.co/api/agent/content/{id}/revise` | `content:write` |
+| Revise from every open comment | `POST https://content.herzenco.co/api/agent/content/{id}/revise-from-comments` | `content:write` |
 | Submit for review | `POST https://content.herzenco.co/api/agent/content/{id}/submit-review` | `content:write` |
 | Approve reviewed content | `POST https://content.herzenco.co/api/agent/content/{id}/approve` | `content:approve` |
 
@@ -118,6 +122,14 @@ Revise body:
 ```
 
 Submit-for-review requires no request body.
+
+### Comment-driven revisions
+
+Reviewers can select draft text in the authenticated review page and attach a comment to that passage, or leave a whole-draft comment. Comments persist across versions. Applied comments remain visible with the version that addressed them.
+
+Before revising a linked draft, Lupe should call `list_comments`. When open comments exist, call `revise_from_comments` instead of manually summarizing them into `revise_draft`. The engine combines every open comment into one revision request, creates the next complete draft version, marks those comments `applied`, and returns the same stable `reviewUrl`.
+
+Never ignore an open comment, delete review history, or mark a comment applied without producing the revision. After the revision, report the new version number, number of applied comments, and `reviewUrl`.
 
 ## 2. Properties and strict separation
 

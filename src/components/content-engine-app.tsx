@@ -13,6 +13,7 @@ import {
   KeyRound,
   ListChecks,
   LogOut,
+  MessageSquare,
   Pencil,
   Play,
   RefreshCw,
@@ -131,6 +132,17 @@ interface WorkspaceContentRecord {
     prompt_snapshot?: string;
     social_meta?: ContentItem["socialMeta"];
   } | null;
+}
+
+interface ReviewComment {
+  id: string;
+  content_version: number;
+  author_email: string;
+  body: string;
+  anchor_text: string | null;
+  status: "open" | "applied";
+  applied_in_version: number | null;
+  created_at: string;
 }
 
 interface EvalResult {
@@ -742,7 +754,7 @@ interface ContentEngineAppProps {
 
 export function ContentEngineApp({ initialReviewId, userEmail, role }: ContentEngineAppProps) {
   const [state, setState] = useState<EngineState>(initialState);
-  const [activeView, setActiveView] = useState<View>("home");
+  const [activeView, setActiveView] = useState<View>(initialReviewId ? "content" : "home");
   const [contentMode, setContentMode] = useState<ContentMode>("list");
   const [homeOptionsOpen, setHomeOptionsOpen] = useState(
     () =>
@@ -751,7 +763,7 @@ export function ContentEngineApp({ initialReviewId, userEmail, role }: ContentEn
   );
   const [form, setForm] = useState<QuickGenerateForm>(emptyForm);
   const [selectedContentId, setSelectedContentId] = useState<string>(
-    initialState.content[0]?.id ?? "",
+    initialReviewId ?? initialState.content[0]?.id ?? "",
   );
   const [selectedPropertySlug, setSelectedPropertySlug] =
     useState<PropertySlug>("herzenco");
@@ -768,13 +780,13 @@ export function ContentEngineApp({ initialReviewId, userEmail, role }: ContentEn
       if (!saved) return;
       const restored = normalizeState(JSON.parse(saved) as Partial<EngineState>);
       setState(restored);
-      setSelectedContentId(restored.content[0]?.id ?? "");
+      if (!initialReviewId) setSelectedContentId(restored.content[0]?.id ?? "");
       storageReady.current = true;
       return;
     }, 0);
 
     return () => window.clearTimeout(restoreTimer);
-  }, []);
+  }, [initialReviewId]);
 
   useEffect(() => {
     const syncTimer = window.setTimeout(() => {
@@ -2563,6 +2575,7 @@ function ReviewView({
 }) {
   const queue = content.filter((item) => item.status === "needs_review");
   const selected = content.find((item) => item.id === selectedContentId) ?? queue[0];
+  const [selectedText, setSelectedText] = useState("");
 
   return (
     <div className="grid gap-5 xl:grid-cols-[380px_minmax(0,1fr)]">
@@ -2579,7 +2592,10 @@ function ReviewView({
                   : "border-white/10 bg-white/[0.025] hover:bg-white/[0.045]"
               }`}
               key={item.id}
-              onClick={() => onSelect(item.id)}
+              onClick={() => {
+                setSelectedText("");
+                onSelect(item.id);
+              }}
               type="button"
             >
               <div className="flex items-center justify-between gap-3">
@@ -2597,7 +2613,15 @@ function ReviewView({
       <Panel title="Review">
         {selected ? (
           <div className="space-y-5">
-            <ContentDetail item={selected} />
+            <ContentDetail item={selected} onTextSelected={setSelectedText} />
+            {selected.serverBacked && (
+              <DraftCommentsPanel
+                contentId={selected.id}
+                key={selected.id}
+                selectedText={selectedText}
+                onClearSelection={() => setSelectedText("")}
+              />
+            )}
             <div className="grid gap-3 md:grid-cols-4">
               <ActionButton
                 icon={<Check size={17} />}
@@ -4512,7 +4536,13 @@ function ContentTable({
   );
 }
 
-function ContentDetail({ item }: { item: ContentItem }) {
+function ContentDetail({
+  item,
+  onTextSelected,
+}: {
+  item: ContentItem;
+  onTextSelected?: (text: string) => void;
+}) {
   return (
     <div className="space-y-4">
       <div>
@@ -4626,11 +4656,172 @@ function ContentDetail({ item }: { item: ContentItem }) {
       )}
       <div className="border border-white/10 bg-[#0d0f12] p-4">
         <p className="font-mono text-xs uppercase text-white/45">Draft</p>
-        <div className="mt-3 whitespace-pre-wrap text-sm leading-6 text-white/70">
+        <div
+          className="mt-3 whitespace-pre-wrap text-sm leading-6 text-white/70 selection:bg-amber-300/30"
+          onMouseUp={(event) => {
+            if (!onTextSelected) return;
+            const selection = window.getSelection();
+            if (!selection || selection.isCollapsed) return;
+            const anchor = selection.toString().trim();
+            const container = event.currentTarget;
+            const range = selection.rangeCount ? selection.getRangeAt(0) : null;
+            if (anchor && range && container.contains(range.commonAncestorContainer)) {
+              onTextSelected(anchor.slice(0, 5_000));
+            }
+          }}
+        >
           {item.body}
         </div>
       </div>
     </div>
+  );
+}
+
+function DraftCommentsPanel({
+  contentId,
+  selectedText,
+  onClearSelection,
+}: {
+  contentId: string;
+  selectedText: string;
+  onClearSelection: () => void;
+}) {
+  const [comments, setComments] = useState<ReviewComment[]>([]);
+  const [body, setBody] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    const loadTimer = window.setTimeout(() => {
+      void fetch(`/api/workspace/content/${encodeURIComponent(contentId)}/comments`)
+        .then(async (response) => {
+          const payload = await response.json() as { data?: ReviewComment[]; message?: string };
+          if (!response.ok) throw new Error(payload.message || "Could not load comments");
+          setComments(payload.data ?? []);
+          setError("");
+        })
+        .catch((loadError) => {
+          setError(loadError instanceof Error ? loadError.message : "Could not load comments");
+        })
+        .finally(() => setLoading(false));
+    }, 0);
+    return () => window.clearTimeout(loadTimer);
+  }, [contentId]);
+
+  async function addComment(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!body.trim()) return;
+    setSubmitting(true);
+    setError("");
+    try {
+      const response = await fetch(`/api/workspace/content/${encodeURIComponent(contentId)}/comments`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ body, anchorText: selectedText || undefined }),
+      });
+      const payload = await response.json() as { data?: ReviewComment; message?: string };
+      if (!response.ok || !payload.data) throw new Error(payload.message || "Could not save comment");
+      setComments((current) => [...current, payload.data!]);
+      setBody("");
+      onClearSelection();
+      window.getSelection()?.removeAllRanges();
+    } catch (saveError) {
+      setError(saveError instanceof Error ? saveError.message : "Could not save comment");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  async function generateRevision() {
+    setSubmitting(true);
+    setError("");
+    try {
+      const response = await fetch(
+        `/api/workspace/content/${encodeURIComponent(contentId)}/revise-from-comments`,
+        { method: "POST" },
+      );
+      const payload = await response.json() as { data?: unknown; message?: string };
+      if (!response.ok) throw new Error(payload.message || "Could not generate the revised draft");
+      window.location.reload();
+    } catch (revisionError) {
+      setError(revisionError instanceof Error ? revisionError.message : "Could not generate the revised draft");
+      setSubmitting(false);
+    }
+  }
+
+  const openComments = comments.filter((comment) => comment.status === "open");
+
+  return (
+    <section className="border border-amber-300/25 bg-amber-300/[0.04] p-4">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <p className="flex items-center gap-2 font-mono text-xs uppercase text-amber-100/70">
+            <MessageSquare size={15} />
+            Draft comments
+          </p>
+          <p className="mt-2 text-sm text-white/55">
+            Select words in the draft to comment on a passage, or leave the selection empty to comment on the whole piece.
+          </p>
+        </div>
+        <button
+          className="border border-amber-300/35 px-3 py-2 text-xs font-medium uppercase tracking-wide text-amber-100 disabled:cursor-not-allowed disabled:opacity-40"
+          disabled={submitting || openComments.length === 0}
+          onClick={generateRevision}
+          type="button"
+        >
+          {submitting ? "Working…" : `Generate revised draft (${openComments.length})`}
+        </button>
+      </div>
+
+      <form className="mt-4 space-y-3" onSubmit={addComment}>
+        {selectedText && (
+          <div className="border-l-2 border-amber-300/60 bg-black/20 px-3 py-2">
+            <p className="font-mono text-[10px] uppercase text-white/40">Selected text</p>
+            <p className="mt-1 line-clamp-3 text-sm text-white/65">{selectedText}</p>
+          </div>
+        )}
+        <textarea
+          className={`${fieldClass} min-h-24 w-full`}
+          onChange={(event) => setBody(event.target.value)}
+          placeholder={selectedText ? "What should change about this passage?" : "Leave a comment on the full draft…"}
+          value={body}
+        />
+        <div className="flex items-center justify-between gap-3">
+          <span className="text-xs text-white/40">{selectedText ? "Attached to selected text" : "Applies to the full draft"}</span>
+          <button
+            className="border border-white/20 bg-white/10 px-3 py-2 text-xs font-medium uppercase tracking-wide disabled:opacity-40"
+            disabled={submitting || !body.trim()}
+            type="submit"
+          >
+            Add comment
+          </button>
+        </div>
+      </form>
+
+      {error && <p className="mt-3 text-sm text-red-300">{error}</p>}
+      <div className="mt-4 space-y-3">
+        {loading && <p className="text-sm text-white/45">Loading comments…</p>}
+        {!loading && comments.length === 0 && <p className="text-sm text-white/45">No comments yet.</p>}
+        {[...comments].reverse().map((comment) => (
+          <article className="border border-white/10 bg-black/20 p-3" key={comment.id}>
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <p className="text-xs font-medium text-white/70">{comment.author_email}</p>
+              <Badge tone={comment.status === "open" ? "amber" : "green"}>
+                {comment.status === "open" ? `Open · draft v${comment.content_version}` : `Applied in v${comment.applied_in_version}`}
+              </Badge>
+            </div>
+            {comment.anchor_text && (
+              <blockquote className="mt-3 border-l-2 border-white/20 pl-3 text-xs italic text-white/45">
+                {comment.anchor_text}
+              </blockquote>
+            )}
+            <p className="mt-3 whitespace-pre-wrap text-sm leading-6 text-white/75">{comment.body}</p>
+            <p className="mt-2 font-mono text-[10px] text-white/30">{formatDateTime(comment.created_at)}</p>
+          </article>
+        ))}
+      </div>
+    </section>
   );
 }
 

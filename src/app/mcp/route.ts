@@ -3,9 +3,11 @@ import {
   approveAgentContent,
   generateAgentDraft,
   getAgentContent,
+  listContentReviewComments,
   listAgentContent,
   listAgentProperties,
   reviseAgentDraft,
+  reviseAgentDraftFromComments,
   submitAgentDraftForReview,
 } from "@/lib/agent/content-service";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
@@ -59,6 +61,16 @@ export async function POST(request: Request) {
     async ({ id }) => toolResult(await getAgentContent(id)),
   );
   server.registerTool(
+    "list_comments",
+    {
+      title: "List review comments",
+      description: "List all persistent reviewer comments for a content item, including open and already-applied comments.",
+      inputSchema: z.object({ id: z.string().uuid() }),
+      annotations: { readOnlyHint: true },
+    },
+    async ({ id }) => toolResult(await listContentReviewComments(id)),
+  );
+  server.registerTool(
     "generate_draft",
     {
       title: "Generate draft",
@@ -90,6 +102,19 @@ export async function POST(request: Request) {
     async (input) => {
       requireScope(principal.scopes, "content:write");
       return toolResult(await reviseAgentDraft(input, principal));
+    },
+  );
+  server.registerTool(
+    "revise_from_comments",
+    {
+      title: "Generate revised draft from comments",
+      description: "Create the next complete draft version using every open reviewer comment, mark those comments applied, and return the same shareable reviewUrl.",
+      inputSchema: z.object({ id: z.string().uuid() }),
+      annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false },
+    },
+    async ({ id }) => {
+      requireScope(principal.scopes, "content:write");
+      return toolResult(await reviseAgentDraftFromComments(id, principal));
     },
   );
   server.registerTool(

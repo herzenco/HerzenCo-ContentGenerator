@@ -20,6 +20,13 @@ interface ReviseDraftInput {
   revisionRequest: string;
 }
 
+interface AddReviewCommentInput {
+  id: string;
+  body: string;
+  anchorText?: string;
+  authorEmail?: string;
+}
+
 interface AgentContentVersion {
   version: number;
   title: string;
@@ -89,6 +96,51 @@ export async function getAgentContent(id: string) {
   if (error) throw new Error(error.message);
   if (!data) throw new Error("content_not_found");
   return normalizeContentRecord(data, true);
+}
+
+export async function listContentReviewComments(id: string) {
+  await getAgentContent(id);
+  const admin = createSupabaseAdminClient();
+  const { data, error } = await admin
+    .from("content_review_comments")
+    .select("id, content_item_id, content_version, author_user_id, author_email, body, anchor_text, status, applied_in_version, created_at, updated_at")
+    .eq("content_item_id", id)
+    .order("created_at", { ascending: true });
+  if (error) throw new Error(error.message);
+  return data ?? [];
+}
+
+export async function addContentReviewComment(
+  input: AddReviewCommentInput,
+  principal: AgentPrincipal,
+) {
+  const content = await getAgentContent(input.id);
+  if (!content.version) throw new Error("content_version_missing");
+  const admin = createSupabaseAdminClient();
+  let authorEmail = input.authorEmail?.trim().toLowerCase() ?? "";
+  if (!authorEmail && principal.actorUserId) {
+    const { data } = await admin.auth.admin.getUserById(principal.actorUserId);
+    authorEmail = data.user?.email?.toLowerCase() ?? "";
+  }
+  if (!authorEmail) authorEmail = "lupe@herzenco.co";
+  const { data, error } = await admin
+    .from("content_review_comments")
+    .insert({
+      content_item_id: input.id,
+      content_version: content.version,
+      author_user_id: principal.actorUserId,
+      author_email: authorEmail,
+      body: input.body.trim(),
+      anchor_text: input.anchorText?.trim() || null,
+    })
+    .select("*")
+    .single();
+  if (error) throw new Error(error.message);
+  await auditAgent(principal, "content.comment", "content_item", input.id, {
+    commentId: data.id,
+    contentVersion: content.version,
+  });
+  return data;
 }
 
 export async function listWorkspaceContent(limit = 100) {
@@ -275,6 +327,46 @@ export async function reviseAgentDraft(
   await admin.from("content_items").update({ status: "needs_review" }).eq("id", current.id);
   await auditAgent(principal, "content.revise", "content_item", current.id, { version, model: result.model });
   return getAgentContent(current.id);
+}
+
+export async function reviseAgentDraftFromComments(
+  id: string,
+  principal: AgentPrincipal,
+) {
+  const comments = (await listContentReviewComments(id)).filter((comment) => comment.status === "open");
+  if (!comments.length) throw new Error("no_open_comments");
+  const revisionRequest = [
+    "Create the next complete draft by applying every reviewer comment below.",
+    "Treat the comments as requirements. Preserve strong material that is not contradicted.",
+    "Do not mention comments, revisions, prompts, or the review process in the deliverable.",
+    ...comments.map((comment, index) => [
+      `COMMENT ${index + 1}`,
+      comment.anchor_text ? `SELECTED TEXT:\n${comment.anchor_text}` : "APPLIES TO: Entire draft",
+      `REVIEWER NOTE:\n${comment.body}`,
+    ].join("\n")),
+  ].join("\n\n");
+  const revised = await reviseAgentDraft({ id, revisionRequest }, principal);
+  if (!revised.version) throw new Error("revised_version_missing");
+  const admin = createSupabaseAdminClient();
+  const commentIds = comments.map((comment) => comment.id);
+  const { error } = await admin
+    .from("content_review_comments")
+    .update({
+      status: "applied",
+      applied_in_version: revised.version,
+      updated_at: new Date().toISOString(),
+    })
+    .in("id", commentIds);
+  if (error) throw new Error(error.message);
+  await auditAgent(principal, "content.revise_from_comments", "content_item", id, {
+    commentIds,
+    version: revised.version,
+  });
+  return {
+    ...revised,
+    appliedComments: commentIds.length,
+    comments: await listContentReviewComments(id),
+  };
 }
 
 export async function submitAgentDraftForReview(id: string, principal: AgentPrincipal) {
