@@ -335,15 +335,36 @@ export async function generateAgentDraft(
     await admin.from("content_items").delete().eq("id", item.id);
     throw new Error(versionError.message);
   }
-  const qa = await runAnthropicQa({ body, title, contentType, context: context.context, language: context.language });
-  await persistQa(item.id, savedVersion.id, qa, admin);
-
-  await auditAgent(principal, "content.generate", "content_item", item.id, {
-    property: input.property,
-    contentType,
-    model: result.model,
-  });
-  return getAgentContent(item.id);
+  try {
+    const qa = await runAnthropicQa({
+      body,
+      title,
+      contentType,
+      context: context.context,
+      language: context.language,
+    });
+    await persistQa(item.id, savedVersion.id, qa, admin);
+    await auditAgent(principal, "content.generate", "content_item", item.id, {
+      property: input.property,
+      contentType,
+      model: result.model,
+      qaStatus: "completed",
+    });
+    return getAgentContent(item.id);
+  } catch (error) {
+    await auditAgent(principal, "content.generate", "content_item", item.id, {
+      property: input.property,
+      contentType,
+      model: result.model,
+      qaStatus: "pending",
+      qaError: safeProviderError(error),
+    });
+    return {
+      ...(await getAgentContent(item.id)),
+      qaStatus: "pending",
+      warnings: ["Draft saved, but Anthropic QA did not complete. Run run_qa before approval."],
+    };
+  }
 }
 
 export async function reviseAgentDraft(
@@ -785,6 +806,16 @@ function canonicalPublishedUrl(baseUrl: string, property: string, slug: string) 
   const base = baseUrl.replace(/\/$/, "");
   if (property === "herzenco-social") return base;
   return `${base}/resources/${encodeURIComponent(slug)}/`;
+}
+
+function safeProviderError(error: unknown) {
+  const message = error instanceof Error ? error.message : "Unknown provider error";
+  if (/authentication_error|api key is invalid|incorrect api key/i.test(message)) {
+    return "provider_authentication_failed";
+  }
+  if (/rate.?limit|429/i.test(message)) return "provider_rate_limited";
+  if (/timeout|timed out/i.test(message)) return "provider_timeout";
+  return "provider_qa_failed";
 }
 
 function reviewUrlForContent(id: string) {
