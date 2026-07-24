@@ -746,6 +746,76 @@ const emptyForm: QuickGenerateForm = {
   generateHeroImage: false,
 };
 
+interface SuggestedPrompt {
+  title: string;
+  description: string;
+  prompt: string;
+  contentType: QuickGenerateForm["contentType"];
+}
+
+const suggestedPrompts: Record<string, SuggestedPrompt[]> = {
+  herzenco: [
+    {
+      title: "Why digital teams stall",
+      description: "A founder-facing article about missing execution ownership.",
+      prompt: "Write a practical website article for founders about why digital teams stall when nobody clearly owns execution. Use concrete examples of shifting priorities, stakeholder and developer drift, and decisions waiting on the founder. Diagnose the operating problem, explain what strong ownership changes, and end with practical actions a founder can take.",
+      contentType: "article",
+    },
+    {
+      title: "The founder as default project manager",
+      description: "Explain the hidden cost of founders holding delivery together.",
+      prompt: "Write a website article for non-technical founders about the hidden cost of becoming the default project manager. Show what happens when the founder translates priorities, chases updates, and resolves every blocker. Explain how an embedded execution owner changes the team's operating rhythm without sounding like a sales pitch.",
+      contentType: "article",
+    },
+    {
+      title: "What good product leadership looks like",
+      description: "A useful operating guide for founder-led digital teams.",
+      prompt: "Create a practical guide for founders explaining what good product and project leadership looks like inside a digital team. Cover ownership, decision rights, priority management, stakeholder communication, and measuring finished business progress instead of activity.",
+      contentType: "article",
+    },
+  ],
+  "humanismo-evolutivo": [
+    {
+      title: "La identidad también evoluciona",
+      description: "Un artículo sobre crecimiento sin perder coherencia personal.",
+      prompt: "Escribe un artículo en español sobre cómo la identidad personal puede evolucionar sin que una persona sienta que está traicionando quién era. Hazlo humano, reflexivo y práctico, con ejemplos cotidianos y preguntas útiles para el lector.",
+      contentType: "article",
+    },
+    {
+      title: "Cambiar sin convertirte en otra persona",
+      description: "Una guía práctica sobre transformación personal consciente.",
+      prompt: "Escribe una guía en español para personas que quieren cambiar hábitos, relaciones o dirección de vida sin caer en fórmulas de autoayuda. Explica cómo distinguir una evolución auténtica de una reacción impulsiva y ofrece pasos concretos para avanzar.",
+      contentType: "article",
+    },
+    {
+      title: "Cuando tu vida anterior ya no te queda",
+      description: "Una reflexión útil sobre transiciones y sentido.",
+      prompt: "Escribe un artículo en español sobre el momento en que una etapa de vida deja de sentirse propia. Aborda la incomodidad, el duelo y la posibilidad de construir sentido nuevo sin promesas exageradas ni lenguaje clínico.",
+      contentType: "article",
+    },
+  ],
+  "herzenco-social": [
+    {
+      title: "The founder is holding delivery together",
+      description: "A direct LinkedIn post about the ownership gap.",
+      prompt: "Write a concise founder-facing LinkedIn post about the moment a founder realizes they are holding delivery together by hand. Open with a concrete midweek operating scene, diagnose the ownership gap, offer one useful reframe, and end cleanly without a marketing CTA.",
+      contentType: "social_post",
+    },
+    {
+      title: "A priority change wrecks the week",
+      description: "Show how one small request creates stakeholder-dev drift.",
+      prompt: "Write a LinkedIn post about how one apparently small priority change on Tuesday can leave engineers waiting and the founder translating decisions by Thursday. Make the pain specific, explain why it happens, and give founders one practical way to protect execution.",
+      contentType: "social_post",
+    },
+    {
+      title: "Output is not progress",
+      description: "Challenge teams that are busy but not moving the business.",
+      prompt: "Write a sharp LinkedIn post for founders whose digital team is shipping tasks without creating meaningful business progress. Use one observable example early, distinguish output from owned outcomes, and end with a clear operating principle.",
+      contentType: "social_post",
+    },
+  ],
+};
+
 interface ContentEngineAppProps {
   initialReviewId?: string;
   userEmail: string;
@@ -1760,6 +1830,7 @@ function HomeView({
   selectedContent?: ContentItem;
 }) {
   const selectedProperty = properties.find((property) => property.slug === form.property);
+  const propertySuggestions = suggestedPrompts[form.property] ?? [];
   const needsReview = content.filter((item) => item.status === "needs_review");
   const comingUp = content
     .filter((item) => item.status === "scheduled")
@@ -1802,6 +1873,60 @@ function HomeView({
             placeholder="What should the Engine make today?"
             value={form.prompt}
           />
+
+          {propertySuggestions.length > 0 && (
+            <div className="border border-[var(--border-hairline)] bg-[var(--surface-subtle)] p-4">
+              <div className="flex flex-wrap items-end justify-between gap-2">
+                <div>
+                  <p className="editorial-eyebrow">Suggested content</p>
+                  <p className="mt-1 text-sm text-[var(--text-secondary)]">
+                    Choose a prepared brief, then edit it above or generate it as written.
+                  </p>
+                </div>
+                {form.prompt && (
+                  <button
+                    className="text-xs text-[var(--text-secondary)] underline underline-offset-4"
+                    onClick={() => onChange({ ...form, prompt: "" })}
+                    type="button"
+                  >
+                    Clear prompt
+                  </button>
+                )}
+              </div>
+              <div className="mt-3 grid gap-2 lg:grid-cols-3">
+                {propertySuggestions.map((suggestion) => {
+                  const selected = form.prompt === suggestion.prompt;
+                  return (
+                    <button
+                      aria-pressed={selected}
+                      className={`border p-3 text-left transition ${
+                        selected
+                          ? "border-[var(--clay-500)] bg-[var(--clay-50)]"
+                          : "border-[var(--border-hairline)] bg-[var(--surface-card)] hover:border-[var(--border-strong)]"
+                      }`}
+                      key={suggestion.title}
+                      onClick={() =>
+                        onChange({
+                          ...form,
+                          prompt: suggestion.prompt,
+                          contentType: suggestion.contentType,
+                          title: "",
+                        })
+                      }
+                      type="button"
+                    >
+                      <span className="block text-sm font-medium text-[var(--text-primary)]">
+                        {suggestion.title}
+                      </span>
+                      <span className="mt-1 block text-xs leading-relaxed text-[var(--text-secondary)]">
+                        {suggestion.description}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
 
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <button
@@ -2071,13 +2196,15 @@ function NeedsReviewCard({
       <div className="mt-4 grid gap-3 lg:grid-cols-[minmax(0,1.25fr)_minmax(0,1fr)]">
         <div className="needs-you-detail">
           <p className="text-xs font-semibold uppercase tracking-[0.14em] text-[var(--clay-600)]">
-            Why this stopped
+            {failedChecks.length > 0 ? "Why this stopped" : "Review status"}
           </p>
           <p className="mt-2 text-sm leading-relaxed text-[var(--text-primary)]">
             {primaryReviewReason(item.evals)}
           </p>
           <p className="mt-2 text-xs text-[var(--text-muted)]">
-            {failedChecks.length} {failedChecks.length === 1 ? "check needs" : "checks need"} attention · {passedChecks} passed
+            {item.evals.length === 0
+              ? "No automated QA results are attached to this draft."
+              : `${failedChecks.length} ${failedChecks.length === 1 ? "check needs" : "checks need"} attention · ${passedChecks} passed`}
           </p>
         </div>
 

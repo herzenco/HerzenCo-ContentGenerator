@@ -45,6 +45,10 @@ export function primaryReviewReason(evals: Array<{ name: string; passed: boolean
   const failedHard = evals.find((entry) => entry.hard && !entry.passed);
   const failedAny = evals.find((entry) => !entry.passed);
   const target = failedHard ?? failedAny;
-  if (!target) return "Needs a final human pass before publishing.";
+  if (!target) {
+    return evals.length === 0
+      ? "No quality blocker has been detected. This draft is ready for editorial review."
+      : "All automated quality checks passed. This draft is ready for editorial approval.";
+  }
   return humanizeEval(target.name, target.detail);
 }
