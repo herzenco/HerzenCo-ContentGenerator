@@ -135,13 +135,17 @@ export async function POST(request: Request) {
     "approve_content",
     {
       title: "Approve content",
-      description: "Approve an item in Needs Review without publishing, scheduling, or triggering a deployment.",
-      inputSchema: z.object({ id: z.string().uuid() }),
+      description: "Approve an item and either publish it now or schedule its publication. Published results include the canonical URL Lupe must return.",
+      inputSchema: z.object({
+        id: z.string().uuid(),
+        mode: z.enum(["now", "scheduled"]),
+        publishAt: z.string().datetime().optional(),
+      }),
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true },
     },
-    async ({ id }) => {
+    async ({ id, mode, publishAt }) => {
       requireScope(principal.scopes, "content:approve");
-      return toolResult(await approveAgentContent(id, principal));
+      return toolResult(await approveAgentContent(id, principal, { mode, publishAt }));
     },
   );
   server.registerTool(

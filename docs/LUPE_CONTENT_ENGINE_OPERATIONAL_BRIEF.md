@@ -101,7 +101,7 @@ Content-Type: application/json
 | Revise from every open comment | `POST https://content.herzenco.co/api/agent/content/{id}/revise-from-comments` | `content:write` |
 | Run or refresh Anthropic QA | `POST https://content.herzenco.co/api/agent/content/{id}/qa` | `content:write` |
 | Submit for review | `POST https://content.herzenco.co/api/agent/content/{id}/submit-review` | `content:write` |
-| Approve reviewed content | `POST https://content.herzenco.co/api/agent/content/{id}/approve` | `content:approve` |
+| Approve and publish/schedule content | `POST https://content.herzenco.co/api/agent/content/{id}/approve` with `{"mode":"now"}` or `{"mode":"scheduled","publishAt":"ISO-8601"}` | `content:approve` |
 
 Generate body:
 
@@ -234,7 +234,11 @@ Call `submit_for_review` with the existing item ID. Confirm the returned status 
 - status;
 - a one-sentence summary of material revisions.
 
-When Lupe has completed the editorial review and is explicitly asked to approve, call `approve_content` on an item whose current status is `needs_review`. Confirm the returned status is `approved`. Approval is a review decision only and must never be represented as publication.
+When Lupe has completed the editorial review and is explicitly asked to approve, she must ask whether to publish now or choose a future publication date. Never call `approve_content` without that decision.
+
+- For immediate publication, use `mode: "now"`. Confirm the returned status is `published` and return the exact `publishedUrl` with the title, property, content ID, publication time, and review URL.
+- For scheduled publication, use `mode: "scheduled"` and an ISO-8601 `publishAt` value. Confirm the returned status is `scheduled` and repeat the scheduled time with its timezone.
+- Never invent or reconstruct a live URL. Use `publishedUrl` returned by the engine. HerzenCo.co can replace the provisional canonical URL with its final URL by calling `POST /api/publishing/confirm`.
 
 ### Actions requiring explicit approval
 

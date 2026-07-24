@@ -62,6 +62,7 @@ interface AgentContentRecord {
   qualityScore: number | null;
   publishAt: string | null;
   publishedAt: string | null;
+  publishedUrl: string | null;
   createdAt: string;
   updatedAt: string;
   title: string | null;
@@ -91,7 +92,7 @@ export async function listAgentContent(options: {
   let query = admin
     .from("content_items")
     .select(
-      "id, type, status, quality_score, publish_at, published_at, created_at, updated_at, properties!inner(slug), content_versions(title, excerpt, version, created_at)",
+      "id, type, status, quality_score, publish_at, published_at, published_url, created_at, updated_at, properties!inner(slug), content_versions(title, excerpt, version, created_at)",
     )
     .order("created_at", { ascending: false })
     .limit(Math.min(Math.max(options.limit ?? 20, 1), 100));
@@ -107,7 +108,7 @@ export async function getAgentContent(id: string) {
   const { data, error } = await admin
     .from("content_items")
     .select(
-      "id, type, status, quality_score, publish_at, published_at, created_at, updated_at, properties!inner(slug), content_versions(*, eval_results(*))",
+      "id, type, status, quality_score, publish_at, published_at, published_url, created_at, updated_at, properties!inner(slug), content_versions(*, eval_results(*))",
     )
     .eq("id", id)
     .maybeSingle();
@@ -166,7 +167,7 @@ export async function listWorkspaceContent(limit = 100) {
   const { data, error } = await admin
     .from("content_items")
     .select(
-      "id, type, status, quality_score, publish_at, published_at, created_at, updated_at, properties!inner(slug), content_versions(*, eval_results(*))",
+      "id, type, status, quality_score, publish_at, published_at, published_url, created_at, updated_at, properties!inner(slug), content_versions(*, eval_results(*))",
     )
     .order("created_at", { ascending: false })
     .limit(Math.min(Math.max(limit, 1), 100));
@@ -174,22 +175,23 @@ export async function listWorkspaceContent(limit = 100) {
   return (data ?? []).map((record) => normalizeContentRecord(record, true));
 }
 
-export async function publishWorkspaceContent(id: string, actorUserId: string) {
+export async function publishWorkspaceContent(id: string, actorUserId: string | null) {
   const content = await getAgentContent(id);
   const latest = content.latestVersion;
   if (!latest?.body_mdx) throw new Error("content_version_missing");
   const admin = createSupabaseAdminClient();
   const { data: property, error: propertyError } = await admin
     .from("properties")
-    .select("id, slug, revalidate_url")
+    .select("id, slug, base_url, revalidate_url")
     .eq("slug", content.property)
     .single();
   if (propertyError) throw new Error(propertyError.message);
   const slug = slugify(latest.title);
   const publishedAt = new Date().toISOString();
+  const publishedUrl = canonicalPublishedUrl(property.base_url, property.slug, slug);
   const { error: itemError } = await admin
     .from("content_items")
-    .update({ status: "published", slug, published_at: publishedAt })
+    .update({ status: "published", slug, published_at: publishedAt, publish_at: null, published_url: publishedUrl })
     .eq("id", id);
   if (itemError) throw new Error(itemError.message);
   const { error: feedError } = await admin.from("published_content_feed").upsert(
@@ -220,8 +222,53 @@ export async function publishWorkspaceContent(id: string, actorUserId: string) {
     metadata: { property: property.slug, source: "human_review" },
   });
   if (auditError) throw new Error(`audit_failed: ${auditError.message}`);
-  if (property.revalidate_url) await triggerWebsiteBuild(property.revalidate_url);
-  return { id, slug, property: property.slug, status: "published", publishedAt };
+  let websiteBuildTriggered = false;
+  let websiteBuildError: string | null = null;
+  if (property.revalidate_url) {
+    try {
+      await triggerWebsiteBuild(property.revalidate_url);
+      websiteBuildTriggered = true;
+    } catch (error) {
+      websiteBuildError = error instanceof Error ? error.message : "Website build trigger failed";
+    }
+  }
+  return {
+    id,
+    slug,
+    property: property.slug,
+    status: "published",
+    publishedAt,
+    publishedUrl,
+    websiteBuildTriggered,
+    websiteBuildError,
+  };
+}
+
+export async function publishDueScheduledContent() {
+  const admin = createSupabaseAdminClient();
+  const now = new Date().toISOString();
+  const { data, error } = await admin
+    .from("content_items")
+    .select("id")
+    .eq("status", "scheduled")
+    .lte("publish_at", now)
+    .order("publish_at", { ascending: true })
+    .limit(25);
+  if (error) throw new Error(error.message);
+
+  const results = [];
+  for (const item of data ?? []) {
+    try {
+      results.push(await publishWorkspaceContent(item.id, null));
+    } catch (error) {
+      results.push({
+        id: item.id,
+        status: "failed",
+        error: error instanceof Error ? error.message : "Unknown error",
+      });
+    }
+  }
+  return { checkedAt: now, processed: results.length, results };
 }
 
 export async function generateAgentDraft(
@@ -434,7 +481,35 @@ export async function submitAgentDraftForReview(id: string, principal: AgentPrin
   return getAgentContent(id);
 }
 
-export async function approveAgentContent(id: string, principal: AgentPrincipal) {
+export async function approveAgentContent(
+  id: string,
+  principal: AgentPrincipal,
+  decision: { mode: "now" | "scheduled"; publishAt?: string },
+) {
+  if (decision.mode === "now") {
+    await markContentApproved(id, principal);
+    return publishWorkspaceContent(id, principal.actorUserId);
+  }
+  const publishAt = decision.publishAt?.trim();
+  if (!publishAt || Number.isNaN(new Date(publishAt).getTime())) {
+    throw new Error("valid_publish_date_required");
+  }
+  if (new Date(publishAt).getTime() <= Date.now()) {
+    throw new Error("publish_date_must_be_in_the_future");
+  }
+  await markContentApproved(id, principal);
+  const admin = createSupabaseAdminClient();
+  const { error } = await admin
+    .from("content_items")
+    .update({ status: "scheduled", publish_at: new Date(publishAt).toISOString() })
+    .eq("id", id)
+    .eq("status", "approved");
+  if (error) throw new Error(error.message);
+  await auditAgent(principal, "content.schedule", "content_item", id, { publishAt });
+  return getAgentContent(id);
+}
+
+async function markContentApproved(id: string, principal: AgentPrincipal) {
   const admin = createSupabaseAdminClient();
   const { data, error } = await admin
     .from("content_items")
@@ -696,6 +771,7 @@ function normalizeContentRecord(record: Record<string, unknown>, includeBody = f
     qualityScore: typeof record.quality_score === "number" ? record.quality_score : null,
     publishAt: typeof record.publish_at === "string" ? record.publish_at : null,
     publishedAt: typeof record.published_at === "string" ? record.published_at : null,
+    publishedUrl: typeof record.published_url === "string" ? record.published_url : null,
     createdAt: String(record.created_at ?? ""),
     updatedAt: String(record.updated_at ?? ""),
     title: latest?.title ?? null,
@@ -703,6 +779,12 @@ function normalizeContentRecord(record: Record<string, unknown>, includeBody = f
     version: latest?.version ?? null,
     ...(includeBody ? { latestVersion: latest, versions } : {}),
   };
+}
+
+function canonicalPublishedUrl(baseUrl: string, property: string, slug: string) {
+  const base = baseUrl.replace(/\/$/, "");
+  if (property === "herzenco-social") return base;
+  return `${base}/resources/${encodeURIComponent(slug)}/`;
 }
 
 function reviewUrlForContent(id: string) {

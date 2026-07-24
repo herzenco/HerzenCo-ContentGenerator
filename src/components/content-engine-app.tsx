@@ -851,6 +851,12 @@ export function ContentEngineApp({ initialReviewId, userEmail, role }: ContentEn
   const [performanceDays, setPerformanceDays] = useState<7 | 30 | 90>(30);
   const [query, setQuery] = useState("");
   const [toast, setToast] = useState("Local workspace ready");
+  const [approvalRequest, setApprovalRequest] = useState<{
+    id: string;
+    mode: "now" | "scheduled";
+    publishAt: string;
+    submitting: boolean;
+  } | null>(null);
   const storageReady = useRef(false);
 
   useEffect(() => {
@@ -1117,45 +1123,60 @@ export function ContentEngineApp({ initialReviewId, userEmail, role }: ContentEn
     }
     const item = state.content.find((entry) => entry.id === id);
     if (!item) return;
-    if (role === "reviewer") {
-      if (!item.serverBacked) {
-        setToast("Only server-backed drafts can be approved by a reviewer.");
-        return;
-      }
-      try {
-        const response = await fetch(`/api/workspace/content/${item.id}/approve`, { method: "POST" });
-        const payload = (await response.json()) as { message?: string };
-        if (!response.ok) throw new Error(payload.message || "Approval failed");
-        setContentItem(id, { status: "approved" });
-        setToast("Content approved and held for publishing");
-      } catch (error) {
-        setToast(error instanceof Error ? error.message : "Approval failed");
-      }
+    if (!item.serverBacked) {
+      setToast("Save this draft to the server before approving it.");
       return;
     }
-    if (item.serverBacked) {
-      try {
-        const response = await fetch(`/api/workspace/content/${item.id}/publish`, { method: "POST" });
-        const payload = (await response.json()) as { message?: string };
-        if (!response.ok) throw new Error(payload.message || "Publishing failed");
-        setContentItem(id, { status: "published", publishedAt: new Date().toISOString() });
-        setToast(item.property === "herzenco-social" ? "LinkedIn draft approved" : "Published");
-      } catch (error) {
-        setToast(error instanceof Error ? error.message : "Publishing failed");
-      }
+    setApprovalRequest({
+      id,
+      mode: "now",
+      publishAt: nextBusinessMorning(),
+      submitting: false,
+    });
+  }
+
+  async function confirmApproval() {
+    if (!approvalRequest) return;
+    const item = state.content.find((entry) => entry.id === approvalRequest.id);
+    if (!item) return;
+    if (approvalRequest.mode === "scheduled" && !approvalRequest.publishAt) {
+      setToast("Choose a publication date and time.");
       return;
     }
-    const isFuture = item.publishAt
-      ? new Date(item.publishAt).getTime() > Date.now()
-      : false;
-    const publishedAt = isFuture ? "" : new Date().toISOString();
-    const patch: Partial<ContentItem> = {
-      status: isFuture ? "scheduled" : "published",
-      publishedAt,
-    };
-    setContentItem(id, patch);
-    setToast(isFuture ? "Scheduled" : "Published");
-    if (!isFuture) void persistPublishedContent({ ...item, ...patch });
+    setApprovalRequest((current) => current ? { ...current, submitting: true } : current);
+    try {
+      const publishAt = approvalRequest.mode === "scheduled"
+        ? new Date(approvalRequest.publishAt).toISOString()
+        : undefined;
+      const response = await fetch(`/api/workspace/content/${item.id}/approve`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ mode: approvalRequest.mode, publishAt }),
+      });
+      const payload = (await response.json()) as {
+        data?: { status?: string; publishedAt?: string; publishedUrl?: string; publishAt?: string };
+        message?: string;
+        error?: string;
+      };
+      if (!response.ok) throw new Error(payload.message || payload.error || "Approval failed");
+      const scheduled = approvalRequest.mode === "scheduled";
+      setContentItem(item.id, {
+        status: scheduled ? "scheduled" : "published",
+        publishAt: scheduled ? publishAt ?? "" : "",
+        publishedAt: scheduled ? "" : payload.data?.publishedAt ?? new Date().toISOString(),
+      });
+      setApprovalRequest(null);
+      setToast(
+        scheduled
+          ? `Approved and scheduled for ${formatDateTime(publishAt ?? "")}`
+          : payload.data?.publishedUrl
+            ? `Published: ${payload.data.publishedUrl}`
+            : "Published",
+      );
+    } catch (error) {
+      setApprovalRequest((current) => current ? { ...current, submitting: false } : current);
+      setToast(error instanceof Error ? error.message : "Approval failed");
+    }
   }
 
   function regenerateContent(id: string) {
@@ -1721,6 +1742,76 @@ export function ContentEngineApp({ initialReviewId, userEmail, role }: ContentEn
           </div>
         </section>
       </div>
+      {approvalRequest && (
+        <div className="fixed inset-0 z-50 grid place-items-center bg-black/55 p-4">
+          <section
+            aria-labelledby="approval-title"
+            aria-modal="true"
+            className="w-full max-w-lg border border-[var(--border-strong)] bg-[var(--surface-card)] p-6 shadow-2xl"
+            role="dialog"
+          >
+            <p className="editorial-eyebrow">Approval and publication</p>
+            <h2 className="editorial-title mt-2 text-2xl" id="approval-title">
+              When should this publish?
+            </h2>
+            <p className="mt-2 text-sm text-[var(--text-secondary)]">
+              Approval requires a publication decision. Publish immediately or choose a future date.
+            </p>
+            <div className="mt-6 grid grid-cols-2 gap-2">
+              <button
+                className={`border px-4 py-3 text-left ${approvalRequest.mode === "now" ? "border-[var(--clay-500)] bg-[var(--surface-raised)]" : "border-[var(--border-soft)]"}`}
+                onClick={() => setApprovalRequest((current) => current ? { ...current, mode: "now" } : current)}
+                type="button"
+              >
+                <span className="block font-medium">Publish now</span>
+                <span className="mt-1 block text-xs text-[var(--text-secondary)]">Send it to the website immediately.</span>
+              </button>
+              <button
+                className={`border px-4 py-3 text-left ${approvalRequest.mode === "scheduled" ? "border-[var(--clay-500)] bg-[var(--surface-raised)]" : "border-[var(--border-soft)]"}`}
+                onClick={() => setApprovalRequest((current) => current ? { ...current, mode: "scheduled" } : current)}
+                type="button"
+              >
+                <span className="block font-medium">Schedule</span>
+                <span className="mt-1 block text-xs text-[var(--text-secondary)]">Publish at a specific date and time.</span>
+              </button>
+            </div>
+            {approvalRequest.mode === "scheduled" && (
+              <label className="mt-4 block text-sm">
+                <span className="editorial-eyebrow">Publication date</span>
+                <input
+                  className="mt-2 w-full border border-[var(--border-soft)] bg-transparent px-3 py-2"
+                  min={new Date().toISOString().slice(0, 16)}
+                  onChange={(event) => setApprovalRequest((current) => current ? { ...current, publishAt: event.target.value } : current)}
+                  type="datetime-local"
+                  value={approvalRequest.publishAt}
+                />
+              </label>
+            )}
+            <div className="mt-6 flex justify-end gap-2">
+              <button
+                className="border border-[var(--border-soft)] px-4 py-2"
+                disabled={approvalRequest.submitting}
+                onClick={() => setApprovalRequest(null)}
+                type="button"
+              >
+                Cancel
+              </button>
+              <button
+                className="bg-[var(--surface-ink)] px-4 py-2 text-[var(--text-on-dark)]"
+                disabled={approvalRequest.submitting}
+                onClick={() => void confirmApproval()}
+                type="button"
+              >
+                {approvalRequest.submitting
+                  ? "Saving..."
+                  : approvalRequest.mode === "now"
+                    ? "Approve and publish"
+                    : "Approve and schedule"}
+              </button>
+            </div>
+          </section>
+        </div>
+      )}
     </main>
   );
 }
@@ -6433,4 +6524,13 @@ function formatDateTime(value: string) {
     minute: "2-digit",
     timeZone: "America/New_York",
   }).format(new Date(value));
+}
+
+function nextBusinessMorning() {
+  const date = new Date();
+  date.setDate(date.getDate() + 1);
+  date.setHours(9, 0, 0, 0);
+  while (date.getDay() === 0 || date.getDay() === 6) date.setDate(date.getDate() + 1);
+  const localOffset = date.getTimezoneOffset() * 60_000;
+  return new Date(date.getTime() - localOffset).toISOString().slice(0, 16);
 }
