@@ -35,6 +35,24 @@ interface AgentContentVersion {
   [key: string]: unknown;
 }
 
+interface QaCheck {
+  name: string;
+  score: number;
+  passed: boolean;
+  hard: boolean;
+  detail: string;
+}
+
+interface QaResult {
+  qualityScore: number;
+  metaTitle: string;
+  metaDescription: string;
+  ogTitle: string;
+  keywords: string[];
+  checks: QaCheck[];
+  model: string;
+}
+
 interface AgentContentRecord {
   id: string;
   reviewUrl: string;
@@ -89,7 +107,7 @@ export async function getAgentContent(id: string) {
   const { data, error } = await admin
     .from("content_items")
     .select(
-      "id, type, status, quality_score, publish_at, published_at, created_at, updated_at, properties!inner(slug), content_versions(*)",
+      "id, type, status, quality_score, publish_at, published_at, created_at, updated_at, properties!inner(slug), content_versions(*, eval_results(*))",
     )
     .eq("id", id)
     .maybeSingle();
@@ -148,7 +166,7 @@ export async function listWorkspaceContent(limit = 100) {
   const { data, error } = await admin
     .from("content_items")
     .select(
-      "id, type, status, quality_score, publish_at, published_at, created_at, updated_at, properties!inner(slug), content_versions(*)",
+      "id, type, status, quality_score, publish_at, published_at, created_at, updated_at, properties!inner(slug), content_versions(*, eval_results(*))",
     )
     .order("created_at", { ascending: false })
     .limit(Math.min(Math.max(limit, 1), 100));
@@ -247,7 +265,7 @@ export async function generateAgentDraft(
     .single();
   if (itemError) throw new Error(itemError.message);
 
-  const { error: versionError } = await admin.from("content_versions").insert({
+  const { data: savedVersion, error: versionError } = await admin.from("content_versions").insert({
     content_item_id: item.id,
     version: 1,
     title,
@@ -265,11 +283,13 @@ export async function generateAgentDraft(
       property: input.property,
       generatedBy: "agent_api",
     },
-  });
+  }).select("id").single();
   if (versionError) {
     await admin.from("content_items").delete().eq("id", item.id);
     throw new Error(versionError.message);
   }
+  const qa = await runAnthropicQa({ body, title, contentType, context: context.context, language: context.language });
+  await persistQa(item.id, savedVersion.id, qa, admin);
 
   await auditAgent(principal, "content.generate", "content_item", item.id, {
     property: input.property,
@@ -308,7 +328,7 @@ export async function reviseAgentDraft(
   const excerpt = extractExcerpt(body, current.type);
   const version = latest.version + 1;
   const admin = createSupabaseAdminClient();
-  const { error } = await admin.from("content_versions").insert({
+  const { data: savedVersion, error } = await admin.from("content_versions").insert({
     content_item_id: current.id,
     version,
     title,
@@ -322,10 +342,40 @@ export async function reviseAgentDraft(
     prompt_snapshot: input.revisionRequest,
     context_hash: context.hash,
     social_meta: { title, property: current.property, generatedBy: "agent_api" },
-  });
+  }).select("id").single();
   if (error) throw new Error(error.message);
-  await admin.from("content_items").update({ status: "needs_review" }).eq("id", current.id);
+  const qa = await runAnthropicQa({
+    body,
+    title,
+    contentType: current.type,
+    context: context.context,
+    language: context.language,
+  });
+  await persistQa(current.id, savedVersion.id, qa, admin);
   await auditAgent(principal, "content.revise", "content_item", current.id, { version, model: result.model });
+  return getAgentContent(current.id);
+}
+
+export async function runAgentQa(id: string, principal: AgentPrincipal) {
+  const current = await getAgentContent(id);
+  const latest = current.latestVersion;
+  if (!latest?.body_mdx || !latest.id) throw new Error("content_version_missing");
+  const context = await loadPropertyContext(current.property);
+  const qa = await runAnthropicQa({
+    body: latest.body_mdx,
+    title: latest.title,
+    contentType: current.type,
+    context: context.context,
+    language: context.language,
+  });
+  const admin = createSupabaseAdminClient();
+  await admin.from("eval_results").delete().eq("content_version_id", String(latest.id));
+  await persistQa(current.id, String(latest.id), qa, admin);
+  await auditAgent(principal, "content.qa", "content_item", current.id, {
+    version: latest.version,
+    reviewer: "anthropic",
+    model: qa.model,
+  });
   return getAgentContent(current.id);
 }
 
@@ -430,6 +480,91 @@ async function loadPropertyContext(slug: string) {
     context,
     hash: `ctx_${createHash("sha256").update(context).digest("hex").slice(0, 16)}`,
   };
+}
+
+async function runAnthropicQa(input: {
+  body: string;
+  title: string;
+  contentType: ContentType;
+  context: string;
+  language: string;
+}): Promise<QaResult> {
+  const provider = getProvider("anthropic");
+  const model = process.env.ANTHROPIC_QA_MODEL?.trim() || "claude-sonnet-5";
+  const result = await provider.generateText({
+    model,
+    instructions: [
+      "You are the independent senior editor and QA reviewer for the Herzen Content Engine.",
+      "Evaluate the OpenAI-generated draft against the supplied brand context.",
+      "Be critical and specific. Do not rewrite the draft.",
+      "Return valid JSON only, without Markdown fences.",
+    ].join("\n"),
+    prompt: [
+      `CONTENT TYPE: ${input.contentType}`,
+      `LANGUAGE: ${input.language}`,
+      `TITLE: ${input.title}`,
+      `DRAFT:\n${input.body}`,
+      `BRAND CONTEXT:\n${input.context}`,
+      `Return this exact JSON shape:
+{"qualityScore":0,"metaTitle":"","metaDescription":"","ogTitle":"","keywords":[""],"checks":[{"name":"Brand alignment","score":0,"passed":false,"hard":true,"detail":""},{"name":"Writing quality","score":0,"passed":false,"hard":true,"detail":""},{"name":"SEO readiness","score":0,"passed":false,"hard":false,"detail":""},{"name":"AEO readiness","score":0,"passed":false,"hard":false,"detail":""},{"name":"Factual safety","score":0,"passed":false,"hard":true,"detail":""}]}
+Scores are integers 0-100. Passed means 75 or higher. For social posts, SEO/AEO are non-blocking and should explain channel relevance. Meta title max 60 characters. Meta description max 155 characters. Supply 3-6 useful keywords.`,
+    ].join("\n\n"),
+    maxOutputTokens: 2_000,
+  });
+  const parsed = JSON.parse(result.text.trim().replace(/^```json\s*/i, "").replace(/\s*```$/, "")) as Omit<QaResult, "model">;
+  const checks = Array.isArray(parsed.checks) ? parsed.checks.slice(0, 8).map((check) => ({
+    name: String(check.name || "Quality check").slice(0, 120),
+    score: Math.max(0, Math.min(100, Math.round(Number(check.score) || 0))),
+    passed: Boolean(check.passed),
+    hard: Boolean(check.hard),
+    detail: String(check.detail || "No detail returned.").slice(0, 1_000),
+  })) : [];
+  if (!checks.length) throw new Error("anthropic_qa_checks_missing");
+  return {
+    qualityScore: Math.max(0, Math.min(100, Math.round(Number(parsed.qualityScore) || 0))),
+    metaTitle: String(parsed.metaTitle || input.title).slice(0, 60),
+    metaDescription: String(parsed.metaDescription || extractExcerpt(input.body, input.contentType)).slice(0, 155),
+    ogTitle: String(parsed.ogTitle || parsed.metaTitle || input.title).slice(0, 100),
+    keywords: Array.isArray(parsed.keywords) ? parsed.keywords.map(String).map((value) => value.trim()).filter(Boolean).slice(0, 6) : [],
+    checks,
+    model: result.model,
+  };
+}
+
+async function persistQa(
+  contentItemId: string,
+  contentVersionId: string,
+  qa: QaResult,
+  admin: ReturnType<typeof createSupabaseAdminClient>,
+) {
+  const { error: versionError } = await admin.from("content_versions").update({
+    meta_title: qa.metaTitle,
+    meta_description: qa.metaDescription,
+    social_meta: {
+      ogDescription: qa.metaDescription,
+      ogTitle: qa.ogTitle,
+      ogType: "article",
+      keywords: qa.keywords,
+      qaModel: qa.model,
+      checkedBy: "anthropic",
+    },
+  }).eq("id", contentVersionId);
+  if (versionError) throw new Error(versionError.message);
+  const { error: evalError } = await admin.from("eval_results").insert(
+    qa.checks.map((check) => ({
+      content_version_id: contentVersionId,
+      check_name: check.name,
+      score: check.score,
+      passed: check.passed,
+      details: { detail: check.detail, hard: check.hard, reviewer: "anthropic", model: qa.model },
+    })),
+  );
+  if (evalError) throw new Error(evalError.message);
+  const { error: itemError } = await admin.from("content_items").update({
+    quality_score: qa.qualityScore,
+    status: "needs_review",
+  }).eq("id", contentItemId);
+  if (itemError) throw new Error(itemError.message);
 }
 
 function buildGenerationInstructions(contentType: ContentType, language: string) {

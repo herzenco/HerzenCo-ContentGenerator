@@ -8,6 +8,7 @@ import {
   listAgentProperties,
   reviseAgentDraft,
   reviseAgentDraftFromComments,
+  runAgentQa,
   submitAgentDraftForReview,
 } from "@/lib/agent/content-service";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
@@ -115,6 +116,19 @@ export async function POST(request: Request) {
     async ({ id }) => {
       requireScope(principal.scopes, "content:write");
       return toolResult(await reviseAgentDraftFromComments(id, principal));
+    },
+  );
+  server.registerTool(
+    "run_qa",
+    {
+      title: "Run Anthropic QA",
+      description: "Review the latest OpenAI-generated version with Anthropic and populate quality, brand, SEO/AEO, metadata, and keyword results.",
+      inputSchema: z.object({ id: z.string().uuid() }),
+      annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true },
+    },
+    async ({ id }) => {
+      requireScope(principal.scopes, "content:write");
+      return toolResult(await runAgentQa(id, principal));
     },
   );
   server.registerTool(

@@ -75,6 +75,7 @@ Expected MCP tools:
 - `generate_draft`
 - `revise_draft`
 - `revise_from_comments`
+- `run_qa`
 - `submit_for_review`
 - `approve_content`
 
@@ -98,6 +99,7 @@ Content-Type: application/json
 | Generate draft | `POST https://content.herzenco.co/api/agent/content` | `content:write` |
 | Revise draft | `POST https://content.herzenco.co/api/agent/content/{id}/revise` | `content:write` |
 | Revise from every open comment | `POST https://content.herzenco.co/api/agent/content/{id}/revise-from-comments` | `content:write` |
+| Run or refresh Anthropic QA | `POST https://content.herzenco.co/api/agent/content/{id}/qa` | `content:write` |
 | Submit for review | `POST https://content.herzenco.co/api/agent/content/{id}/submit-review` | `content:write` |
 | Approve reviewed content | `POST https://content.herzenco.co/api/agent/content/{id}/approve` | `content:approve` |
 
@@ -112,6 +114,13 @@ Generate body:
 ```
 
 Do not provide `requestedTitle` by default. The engine should create the editorial title. Supply it only when the user explicitly fixes a title.
+
+Every new draft and every revision runs through the same two-stage pipeline automatically:
+
+1. OpenAI writes the complete draft, including its editorial title.
+2. Anthropic independently checks brand alignment, writing quality, SEO readiness, AEO readiness, and factual safety. It also supplies the quality score, metadata, keywords, and concrete review notes.
+
+Use `run_qa` only to refresh those checks on an older draft or after an out-of-band edit. Do not claim a draft has passed QA unless the returned item contains Anthropic evaluation results.
 
 Revise body:
 

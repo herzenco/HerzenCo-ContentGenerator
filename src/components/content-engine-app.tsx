@@ -9,7 +9,6 @@ import {
   FileText,
   Gauge,
   Globe2,
-  ImageIcon,
   KeyRound,
   ListChecks,
   LogOut,
@@ -105,6 +104,9 @@ interface ContentItem {
     ogDescription: string;
     ogType: "article";
     ogImage?: string;
+    keywords?: string[];
+    qaModel?: string;
+    checkedBy?: string;
   };
   heroImageUrl?: string;
   heroImageAlt?: string;
@@ -130,7 +132,14 @@ interface WorkspaceContentRecord {
     meta_title?: string;
     meta_description?: string;
     prompt_snapshot?: string;
+    context_hash?: string;
     social_meta?: ContentItem["socialMeta"];
+    eval_results?: Array<{
+      check_name: string;
+      score: number;
+      passed: boolean;
+      details?: { detail?: string; hard?: boolean; reviewer?: string; model?: string };
+    }>;
   } | null;
 }
 
@@ -1050,116 +1059,45 @@ export function ContentEngineApp({ initialReviewId, userEmail, role }: ContentEn
       return;
     }
     const contentType = normalizeContentTypeForProperty(property, form.contentType);
-    const visualProfile = getVisualProfileCompleteness(state, form.property);
-    const wantsHeroImage = Boolean(
-      property?.imagesEnabled && form.generateHeroImage,
-    );
-    const brandContext = assembleBrandContext(state, form.property);
-    const title = form.title.trim() || makeTitle(form.prompt, property?.language);
-    const keywords = parseKeywords(form.keywords);
-    const primaryKeyword = keywords[0] ?? title.split(" ").slice(0, 2).join(" ");
-    const excerpt = makeExcerpt(form.prompt, property?.language);
-    const metaDescription = makeMetaDescription(excerpt, primaryKeyword, property?.language);
-    const id = makeId("ci");
-    const item: ContentItem = {
-      id,
-      title,
-      property: form.property,
-      prompt: form.prompt.trim(),
-      contentType,
-      status: "drafting",
-      source: "quick_generate",
-      keywords,
-      toneOverride: form.toneOverride.trim(),
-      qualityScore: null,
-      publishAt: form.publishAt,
-      publishedAt: "",
-      createdAt: new Date().toISOString(),
-      excerpt: makeExcerpt(form.prompt, property?.language),
-      metaTitle: title.slice(0, 60),
-      metaDescription,
-      evals: [],
-      body: "",
-      contextHash: hashString(brandContext),
-      socialMeta: {
-        ogTitle: title.slice(0, 60),
-        ogDescription: metaDescription,
-        ogType: "article",
-      },
-      imageStatus: wantsHeroImage
-        ? visualProfile.complete
-          ? "queued"
-          : "skipped"
-        : "off",
-      imageCheck: wantsHeroImage
-        ? visualProfile.complete
-          ? "Image brief queued after QA."
-          : "visual_profile_incomplete: visual style description required."
-        : "Hero image generation is off for this property.",
-    };
-
-    setState((current) => ({ ...current, content: [item, ...current.content] }));
-    setSelectedContentId(id);
-    setForm({
-      ...emptyForm,
-      property: form.property,
-      contentType: defaultContentTypeForProperty(property),
-      skipAutoPublish: property.surface === "social",
-      generateHeroImage: Boolean(property?.imagesEnabled),
-    });
-    setToast("Draft job started");
-
-    const draftModel = resolveServedModel(state, {
-      task: "draft",
-      property: form.property,
-      contentType,
-      language: property?.language ?? "English",
-    });
-
+    setToast("OpenAI is writing. Anthropic will review next.");
     try {
-      const response = await fetch("/api/ai/generate", {
+      const response = await fetch("/api/workspace/content", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          provider: draftModel.provider,
-          model: draftModel.modelId,
-          maxOutputTokens: 8_000,
-          instructions: buildContentInstructions(
-            property?.language ?? "English",
-            item.contentType,
-            item.property,
-          ),
-          prompt: buildArticlePrompt({
-            requestedTitle: form.title.trim(),
-            request: form.prompt.trim(),
-            keywords,
-            toneOverride: form.toneOverride.trim(),
-            brandContext,
-          }),
+          property: form.property,
+          contentType,
+          prompt: [
+            form.prompt.trim(),
+            form.keywords.trim() ? `Requested keywords: ${form.keywords.trim()}` : "",
+            form.toneOverride.trim() ? `Tone adjustment: ${form.toneOverride.trim()}` : "",
+          ].filter(Boolean).join("\n\n"),
+          requestedTitle: form.title.trim() || undefined,
         }),
       });
       const payload = (await response.json()) as {
-        data?: { text?: string; model?: string; provider?: string };
+        data?: WorkspaceContentRecord;
         message?: string;
       };
-      if (!response.ok || !payload.data?.text) {
-        throw new Error(payload.message || "The provider returned no article.");
+      if (!response.ok || !payload.data) {
+        throw new Error(payload.message || "The content pipeline returned no draft.");
       }
-
-      const generatedItem = applyGeneratedContent(
-        item,
-        payload.data.text,
-        Boolean(form.title.trim()),
-        property.language,
-      );
-      setContentItem(id, generatedItem);
-      setToast(`Draft received from ${payload.data.model ?? draftModel.displayName}`);
-      finishPipeline(generatedItem, form.skipAutoPublish);
-    } catch (error) {
-      setContentItem(id, {
-        status: "failed",
-        body: "",
+      const generatedItem = workspaceRecordToContentItem(payload.data);
+      if (!generatedItem) throw new Error("The saved draft is incomplete.");
+      setState((current) => ({
+        ...current,
+        content: [generatedItem, ...current.content.filter((item) => item.id !== generatedItem.id)],
+      }));
+      setSelectedContentId(generatedItem.id);
+      setForm({
+        ...emptyForm,
+        property: form.property,
+        contentType: defaultContentTypeForProperty(property),
+        skipAutoPublish: property.surface === "social",
+        generateHeroImage: false,
       });
+      setToast("Draft ready. OpenAI generated it and Anthropic completed QA.");
+    } catch (error) {
       setToast(error instanceof Error ? error.message : "Draft generation failed");
     }
   }
@@ -1226,14 +1164,6 @@ export function ContentEngineApp({ initialReviewId, userEmail, role }: ContentEn
     setContentItem(id, regenerated);
     setToast("Regeneration started");
     finishPipeline(regenerated, false);
-  }
-
-  function regenerateHeroImage(id: string) {
-    const item = state.content.find((entry) => entry.id === id);
-    if (!item) return;
-    const brand = state.brands.find((entry) => entry.property === item.property);
-    setContentItem(id, buildHeroImagePatch(item, brand));
-    setToast("Hero image regenerated");
   }
 
   function rejectContent(id: string) {
@@ -1676,7 +1606,6 @@ export function ContentEngineApp({ initialReviewId, userEmail, role }: ContentEn
                 onApprove={approveContent}
                 onDraft={draftFromTopic}
                 onRegenerate={regenerateContent}
-                onRegenerateImage={regenerateHeroImage}
                 onModeChange={setContentMode}
                 onPublish={publishNow}
                 onReject={rejectContent}
@@ -2260,7 +2189,6 @@ function ContentView({
   onApprove,
   onDraft,
   onRegenerate,
-  onRegenerateImage,
   onModeChange,
   onPublish,
   onReject,
@@ -2275,7 +2203,6 @@ function ContentView({
   onApprove: (id: string) => void;
   onDraft: (topic: Topic) => void;
   onRegenerate: (id: string) => void;
-  onRegenerateImage: (id: string) => void;
   onModeChange: (mode: ContentMode) => void;
   onPublish: (id: string) => void;
   onReject: (id: string) => void;
@@ -2342,7 +2269,6 @@ function ContentView({
             content={content}
             onApprove={onApprove}
             onRegenerate={onRegenerate}
-            onRegenerateImage={onRegenerateImage}
             onReject={onReject}
             onSelect={onSelect}
             selectedContentId={selectedContentId}
@@ -2687,7 +2613,6 @@ function ReviewView({
   content,
   onApprove,
   onRegenerate,
-  onRegenerateImage,
   onReject,
   onSelect,
   selectedContentId,
@@ -2695,7 +2620,6 @@ function ReviewView({
   content: ContentItem[];
   onApprove: (id: string) => void;
   onRegenerate: (id: string) => void;
-  onRegenerateImage: (id: string) => void;
   onReject: (id: string) => void;
   onSelect: (id: string) => void;
   selectedContentId: string;
@@ -2703,6 +2627,18 @@ function ReviewView({
   const queue = content.filter((item) => item.status === "needs_review");
   const selected = content.find((item) => item.id === selectedContentId) ?? queue[0];
   const [selectedText, setSelectedText] = useState("");
+  const [reviewComments, setReviewComments] = useState<ReviewComment[]>([]);
+  const [qaRunning, setQaRunning] = useState(false);
+
+  async function runQa(id: string) {
+    setQaRunning(true);
+    const response = await fetch(`/api/workspace/content/${encodeURIComponent(id)}/qa`, { method: "POST" });
+    if (response.ok) {
+      window.location.reload();
+      return;
+    }
+    setQaRunning(false);
+  }
 
   return (
     <div className="grid gap-5 xl:grid-cols-[380px_minmax(0,1fr)]">
@@ -2740,16 +2676,23 @@ function ReviewView({
       <Panel title="Review">
         {selected ? (
           <div className="space-y-5">
-            <ContentDetail item={selected} onTextSelected={setSelectedText} />
-            {selected.serverBacked && (
-              <DraftCommentsPanel
-                contentId={selected.id}
-                key={selected.id}
-                selectedText={selectedText}
-                onClearSelection={() => setSelectedText("")}
+            <div className="grid items-start gap-4 xl:grid-cols-[minmax(0,1fr)_340px]">
+              <ContentDetail
+                comments={reviewComments}
+                item={selected}
+                onTextSelected={setSelectedText}
               />
-            )}
-            <div className="grid gap-3 md:grid-cols-4">
+              {selected.serverBacked && (
+                <DraftCommentsPanel
+                  contentId={selected.id}
+                  key={selected.id}
+                  onClearSelection={() => setSelectedText("")}
+                  onCommentsChange={setReviewComments}
+                  selectedText={selectedText}
+                />
+              )}
+            </div>
+            <div className="grid gap-3 md:grid-cols-3">
               <ActionButton
                 icon={<Check size={17} />}
                 label="Approve"
@@ -2757,17 +2700,19 @@ function ReviewView({
                 tone="green"
               />
               <ActionButton
-                icon={<ImageIcon size={17} />}
-                label="Image"
-                onClick={() => onRegenerateImage(selected.id)}
-                tone="cyan"
-              />
-              <ActionButton
                 icon={<RefreshCw size={17} />}
                 label="Regenerate"
                 onClick={() => onRegenerate(selected.id)}
                 tone="cyan"
               />
+              {selected.serverBacked && (
+                <ActionButton
+                  icon={<ShieldCheck size={17} />}
+                  label={qaRunning ? "Checking…" : "Run Anthropic QA"}
+                  onClick={() => void runQa(selected.id)}
+                  tone="cyan"
+                />
+              )}
               <ActionButton
                 icon={<X size={17} />}
                 label="Reject"
@@ -2786,8 +2731,14 @@ function ReviewView({
                     key={evalResult.name}
                   >
                     <div>
-                      <p className="font-medium">{humanizeEval(evalResult.name, evalResult.detail)}</p>
-                      <p className="mt-1 font-mono text-xs text-white/35">{evalResult.name}</p>
+                      <p className="font-medium">
+                        {evalResult.passed
+                          ? `${evalResult.name} passed`
+                          : humanizeEval(evalResult.name, evalResult.detail)}
+                      </p>
+                      <p className="mt-1 font-mono text-xs text-white/35">
+                        {evalResult.passed ? "No blocker" : "Needs attention"}
+                      </p>
                     </div>
                     <Score value={evalResult.score} />
                     <p className="text-sm text-white/60">{evalResult.detail}</p>
@@ -4664,9 +4615,11 @@ function ContentTable({
 }
 
 function ContentDetail({
+  comments = [],
   item,
   onTextSelected,
 }: {
+  comments?: ReviewComment[];
   item: ContentItem;
   onTextSelected?: (text: string) => void;
 }) {
@@ -4679,60 +4632,51 @@ function ContentDetail({
           <Badge tone="gray">{propertyLabel(item.property)}</Badge>
         </div>
         <h2 className="mt-3 text-xl font-semibold">{item.title}</h2>
-        <p className="mt-2 text-sm leading-6 text-white/60">{item.excerpt}</p>
+      </div>
+      <div className="border border-white/10 bg-[#0d0f12] p-4">
+        <p className="font-mono text-xs uppercase text-white/45">Draft</p>
+        <div
+          className="mt-3 whitespace-pre-wrap text-sm leading-6 text-white/70 selection:bg-amber-300/30"
+          onMouseUp={(event) => {
+            if (!onTextSelected) return;
+            const selection = window.getSelection();
+            if (!selection || selection.isCollapsed) return;
+            const anchor = selection.toString().trim();
+            const container = event.currentTarget;
+            const range = selection.rangeCount ? selection.getRangeAt(0) : null;
+            if (anchor && range && container.contains(range.commonAncestorContainer)) {
+              onTextSelected(anchor.slice(0, 5_000));
+            }
+          }}
+        >
+          {renderAnnotatedDraft(item.body, comments)}
+        </div>
       </div>
       <div className="grid gap-3 md:grid-cols-2">
-        <MiniStat label="Source" value={sourceLabel(item.source)} />
+        <MiniStat label="Source" value="Content Engine" />
         <MiniStat
-          label={item.status === "published" ? "Published" : "Publish date"}
-          value={formatDateTime(item.publishedAt || item.publishAt)}
+          label="Publish date"
+          value={item.publishedAt ? formatDateTime(item.publishedAt) : "Not published yet"}
+        />
+        <MiniStat label="Generated by" value="OpenAI" />
+        <MiniStat label="Checked by" value={item.evals.length ? "Anthropic" : "Anthropic QA pending"} />
+        <MiniStat
+          label="Quality score"
+          value={item.qualityScore === null ? "Anthropic QA pending" : `${item.qualityScore}/100`}
         />
         <MiniStat label="Meta title" value={item.metaTitle} />
-        <MiniStat label="Keywords" value={item.keywords.join(", ") || "-"} />
+        <MiniStat label="Keywords" value={item.keywords.join(", ") || "Anthropic QA pending"} />
         <MiniStat
           label="Brand alignment"
           value={
             item.evals.find((evalResult) => evalResult.name === "Brand alignment")
               ? `${item.evals.find((evalResult) => evalResult.name === "Brand alignment")?.score}`
-              : "-"
+              : "Anthropic QA pending"
           }
         />
-        <MiniStat label="Context hash" value={item.contextHash ?? "-"} />
-        <MiniStat label="OG title" value={item.socialMeta?.ogTitle ?? "-"} />
-        <MiniStat label="Image" value={item.imageStatus ?? "off"} />
-        <MiniStat label="Alt text" value={item.heroImageAlt ?? "-"} />
+        <MiniStat label="Context hash" value={item.contextHash ?? "Context recorded on next generation"} />
+        <MiniStat label="OG title" value={item.socialMeta?.ogTitle ?? item.metaTitle} />
       </div>
-      {(item.heroImageUrl || item.imageCheck) && (
-        <div className="border border-white/10 bg-[#0d0f12] p-4">
-          <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-            <div>
-              <p className="font-mono text-xs uppercase text-white/45">Hero image</p>
-              <p className="mt-2 text-sm text-white/60">{item.imageCheck}</p>
-            </div>
-            <Badge
-              tone={
-                item.imageStatus === "generated"
-                  ? "green"
-                  : item.imageStatus === "failed"
-                    ? "red"
-                    : item.imageStatus === "queued"
-                      ? "cyan"
-                      : "gray"
-              }
-            >
-              {item.imageStatus ?? "off"}
-            </Badge>
-          </div>
-          {item.heroImageUrl && (
-            <div className="mt-4 flex aspect-video items-center justify-center border border-cyan-300/20 bg-cyan-300/10 text-cyan-100">
-              <div className="flex items-center gap-2 text-sm">
-                <ImageIcon size={18} />
-                {item.heroImageUrl}
-              </div>
-            </div>
-          )}
-        </div>
-      )}
       {(item.servedModels ?? []).length > 0 && (
         <div className="border border-white/10 bg-[#0d0f12] p-4">
           <p className="font-mono text-xs uppercase text-white/45">Model calls</p>
@@ -4781,37 +4725,48 @@ function ContentDetail({
           </div>
         </div>
       )}
-      <div className="border border-white/10 bg-[#0d0f12] p-4">
-        <p className="font-mono text-xs uppercase text-white/45">Draft</p>
-        <div
-          className="mt-3 whitespace-pre-wrap text-sm leading-6 text-white/70 selection:bg-amber-300/30"
-          onMouseUp={(event) => {
-            if (!onTextSelected) return;
-            const selection = window.getSelection();
-            if (!selection || selection.isCollapsed) return;
-            const anchor = selection.toString().trim();
-            const container = event.currentTarget;
-            const range = selection.rangeCount ? selection.getRangeAt(0) : null;
-            if (anchor && range && container.contains(range.commonAncestorContainer)) {
-              onTextSelected(anchor.slice(0, 5_000));
-            }
-          }}
-        >
-          {item.body}
-        </div>
-      </div>
     </div>
   );
+}
+
+function renderAnnotatedDraft(body: string, comments: ReviewComment[]) {
+  const anchors = comments
+    .filter((comment) => comment.anchor_text && body.includes(comment.anchor_text))
+    .map((comment) => comment.anchor_text!)
+    .filter((anchor, index, all) => all.indexOf(anchor) === index)
+    .sort((a, b) => body.indexOf(a) - body.indexOf(b));
+  if (!anchors.length) return body;
+  const parts: ReactNode[] = [];
+  let cursor = 0;
+  anchors.forEach((anchor, index) => {
+    const start = body.indexOf(anchor, cursor);
+    if (start < cursor) return;
+    parts.push(body.slice(cursor, start));
+    parts.push(
+      <mark
+        className="border-b-2 border-amber-500 bg-amber-200/35 px-0.5 text-inherit"
+        key={`${start}-${index}`}
+        title="This passage has a review comment"
+      >
+        {anchor}
+      </mark>,
+    );
+    cursor = start + anchor.length;
+  });
+  parts.push(body.slice(cursor));
+  return parts;
 }
 
 function DraftCommentsPanel({
   contentId,
   selectedText,
   onClearSelection,
+  onCommentsChange,
 }: {
   contentId: string;
   selectedText: string;
   onClearSelection: () => void;
+  onCommentsChange: (comments: ReviewComment[]) => void;
 }) {
   const [comments, setComments] = useState<ReviewComment[]>([]);
   const [body, setBody] = useState("");
@@ -4826,6 +4781,7 @@ function DraftCommentsPanel({
           const payload = await response.json() as { data?: ReviewComment[]; message?: string };
           if (!response.ok) throw new Error(payload.message || "Could not load comments");
           setComments(payload.data ?? []);
+          onCommentsChange(payload.data ?? []);
           setError("");
         })
         .catch((loadError) => {
@@ -4834,7 +4790,7 @@ function DraftCommentsPanel({
         .finally(() => setLoading(false));
     }, 0);
     return () => window.clearTimeout(loadTimer);
-  }, [contentId]);
+  }, [contentId, onCommentsChange]);
 
   async function addComment(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -4850,6 +4806,7 @@ function DraftCommentsPanel({
       const payload = await response.json() as { data?: ReviewComment; message?: string };
       if (!response.ok || !payload.data) throw new Error(payload.message || "Could not save comment");
       setComments((current) => [...current, payload.data!]);
+      onCommentsChange([...comments, payload.data]);
       setBody("");
       onClearSelection();
       window.getSelection()?.removeAllRanges();
@@ -4880,7 +4837,7 @@ function DraftCommentsPanel({
   const openComments = comments.filter((comment) => comment.status === "open");
 
   return (
-    <section className="border border-amber-300/25 bg-amber-300/[0.04] p-4">
+    <section className="sticky top-4 border border-amber-300/25 bg-amber-300/[0.04] p-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <p className="flex items-center gap-2 font-mono text-xs uppercase text-amber-100/70">
@@ -4888,7 +4845,7 @@ function DraftCommentsPanel({
             Draft comments
           </p>
           <p className="mt-2 text-sm text-white/55">
-            Select words in the draft to comment on a passage, or leave the selection empty to comment on the whole piece.
+            Highlight text in the draft. Your note will stay linked to that passage and appear here.
           </p>
         </div>
         <button
@@ -4911,14 +4868,14 @@ function DraftCommentsPanel({
         <textarea
           className={`${fieldClass} min-h-24 w-full`}
           onChange={(event) => setBody(event.target.value)}
-          placeholder={selectedText ? "What should change about this passage?" : "Leave a comment on the full draft…"}
+          placeholder={selectedText ? "What should change about this passage?" : "Highlight draft text to attach a comment…"}
           value={body}
         />
         <div className="flex items-center justify-between gap-3">
-          <span className="text-xs text-white/40">{selectedText ? "Attached to selected text" : "Applies to the full draft"}</span>
+          <span className="text-xs text-white/40">{selectedText ? "Attached to highlighted text" : "Highlight a passage first"}</span>
           <button
             className="border border-white/20 bg-white/10 px-3 py-2 text-xs font-medium uppercase tracking-wide disabled:opacity-40"
-            disabled={submitting || !body.trim()}
+            disabled={submitting || !body.trim() || !selectedText}
             type="submit"
           >
             Add comment
@@ -5224,7 +5181,7 @@ function workspaceRecordToContentItem(record: WorkspaceContentRecord): ContentIt
     contentType: record.type,
     status: statusMap[record.status] ?? "needs_review",
     source: "api",
-    keywords: [],
+    keywords: version.social_meta?.keywords ?? [],
     toneOverride: "Agent-generated from the active property context",
     qualityScore: record.qualityScore,
     publishAt: record.publishAt ?? "",
@@ -5233,8 +5190,22 @@ function workspaceRecordToContentItem(record: WorkspaceContentRecord): ContentIt
     excerpt: version.excerpt ?? "",
     metaTitle: version.meta_title ?? version.title.slice(0, 60),
     metaDescription: version.meta_description ?? (version.excerpt ?? "").slice(0, 155),
-    evals: [],
+    evals: (version.eval_results ?? []).map((result) => ({
+      name: result.check_name,
+      score: result.score,
+      passed: result.passed,
+      detail: result.details?.detail ?? "Anthropic completed this check.",
+      hard: result.details?.hard ?? false,
+      category: result.check_name.includes("Brand")
+        ? "brand"
+        : result.check_name.includes("SEO")
+          ? "seo"
+          : result.check_name.includes("AEO")
+            ? "aeo"
+            : "quality",
+    })),
     body: version.body_mdx,
+    contextHash: version.context_hash,
     socialMeta: version.social_meta,
     imageStatus: "off",
     imageCheck: "Hero image generation is off for this property.",
