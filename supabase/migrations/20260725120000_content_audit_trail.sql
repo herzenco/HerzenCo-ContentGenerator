@@ -15,6 +15,8 @@ create table if not exists public.content_audit_events (
 
 create index if not exists content_audit_events_item_created_idx
   on public.content_audit_events(content_item_id, created_at desc);
+create index if not exists content_audit_events_actor_created_idx
+  on public.content_audit_events(actor_user_id, created_at desc);
 
 alter table public.content_audit_events enable row level security;
 
