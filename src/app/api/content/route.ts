@@ -45,8 +45,8 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
-  const supabase = await authenticatedClient();
-  if (!supabase) {
+  const authorization = await authenticatedClient();
+  if (!authorization) {
     return Response.json({ error: "unauthorized" }, { status: 401 });
   }
 
@@ -70,7 +70,10 @@ export async function POST(request: Request) {
   }
 
   try {
-    const content = await savePublishedContent(supabase, parsed.data);
+    const content = await savePublishedContent(authorization.supabase, parsed.data, {
+      userId: authorization.user.id,
+      email: authorization.user.email,
+    });
     const websiteBuildTriggered = Boolean(content.deployHookUrl?.trim());
     if (websiteBuildTriggered) await triggerWebsiteBuild(content.deployHookUrl);
     const publicContent = {
@@ -93,7 +96,7 @@ async function authenticatedClient() {
   const authorization = await authorizeSession(["admin", "publisher"]);
   if (!authorization.ok) return null;
   return authorization.user.email?.toLowerCase().endsWith("@herzenco.co")
-    ? authorization.supabase
+    ? authorization
     : null;
 }
 

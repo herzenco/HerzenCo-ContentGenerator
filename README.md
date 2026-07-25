@@ -17,6 +17,7 @@ The engine is the hub. Static sites consume the public Content API during their 
 - Authenticated publish: `POST /api/content`
 - Approval requires a publication decision: `POST /api/agent/content/{id}/approve` with `mode: "now"` or `mode: "scheduled"` plus `publishAt`.
 - Published agent records include `publishedUrl`. Target websites can confirm the final canonical URL through `POST /api/publishing/confirm` using `PUBLISH_SECRET`.
+- Every content mutation is recorded in `content_audit_events` with actor, timestamp, version, action, and field-level before/after values. Team members can view the timeline on the review page; agents can call `get_content_audit`.
 - Website consumer: the Herzen Co. static build fetches the feed, generates resource pages, updates its listing and sitemap, and publishes the result through Vercel.
 
 Publishing requires an authenticated `@herzenco.co` Supabase session. Public endpoints read from the RLS-protected `published_content_feed`, which contains publish-safe fields only. A successful publish triggers the property-specific Vercel deploy hook stored in `properties.revalidate_url`.

@@ -14,6 +14,7 @@ import {
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
 import { z } from "zod/v4";
+import { listContentAudit } from "@/lib/content-audit";
 
 export const runtime = "nodejs";
 
@@ -70,6 +71,16 @@ export async function POST(request: Request) {
       annotations: { readOnlyHint: true },
     },
     async ({ id }) => toolResult(await listContentReviewComments(id)),
+  );
+  server.registerTool(
+    "get_content_audit",
+    {
+      title: "Get content audit trail",
+      description: "List every recorded change to a content item, including actor, timestamp, version, action, and field-level before/after values.",
+      inputSchema: z.object({ id: z.string().uuid() }),
+      annotations: { readOnlyHint: true },
+    },
+    async ({ id }) => toolResult(await listContentAudit(id)),
   );
   server.registerTool(
     "generate_draft",

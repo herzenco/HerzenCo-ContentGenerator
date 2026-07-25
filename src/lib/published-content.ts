@@ -1,5 +1,6 @@
 import "server-only";
 
+import { recordContentAudit } from "@/lib/content-audit";
 import { createSupabasePublicClient } from "@/utils/supabase/admin";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
@@ -69,7 +70,7 @@ export async function savePublishedContent(supabase: SupabaseClient, input: {
   publishedAt?: string;
   heroImageUrl?: string | null;
   heroImageAlt?: string | null;
-}) {
+}, actor: { userId: string; email?: string | null }) {
   const { data: property, error: propertyError } = await supabase
     .from("properties")
     .select("id, slug, revalidate_url")
@@ -178,6 +179,21 @@ export async function savePublishedContent(supabase: SupabaseClient, input: {
     { onConflict: "id" },
   );
   if (feedError) throw feedError;
+  if (!contentItemId) throw new Error("content_item_missing_after_publish");
+  await recordContentAudit({
+    contentItemId,
+    actor: { userId: actor.userId, email: actor.email, type: "user" },
+    action: existing ? "content.update_and_publish" : "content.create_and_publish",
+    version,
+    changes: [
+      { field: "title", before: null, after: input.title },
+      { field: "body", before: null, after: input.body },
+      { field: "excerpt", before: null, after: input.excerpt },
+      { field: "status", before: existing ? "published" : null, after: "published" },
+      { field: "published_at", before: null, after: publishedAt },
+    ],
+    metadata: { property: input.property, slug },
+  });
 
   return {
     id: contentItemId,

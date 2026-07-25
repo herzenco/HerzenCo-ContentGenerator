@@ -154,6 +154,17 @@ interface ReviewComment {
   created_at: string;
 }
 
+interface ContentAuditEvent {
+  id: string;
+  created_at: string;
+  actor_email: string;
+  actor_type: "user" | "agent" | "system" | "website";
+  action: string;
+  content_version: number | null;
+  changes: Array<{ field: string; before?: unknown; after?: unknown }>;
+  metadata: Record<string, unknown>;
+}
+
 interface EvalResult {
   name: string;
   score: number;
@@ -1179,9 +1190,33 @@ export function ContentEngineApp({ initialReviewId, userEmail, role }: ContentEn
     }
   }
 
-  function regenerateContent(id: string) {
+  async function regenerateContent(id: string) {
     const item = state.content.find((entry) => entry.id === id);
     if (!item) return;
+    if (item.serverBacked) {
+      setToast("Regenerating draft with OpenAI, then running Anthropic QA…");
+      try {
+        const response = await fetch(`/api/workspace/content/${encodeURIComponent(id)}/revise`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({}),
+        });
+        const payload = await response.json() as { data?: WorkspaceContentRecord; message?: string };
+        if (!response.ok || !payload.data) {
+          throw new Error(payload.message || "Regeneration failed");
+        }
+        const revised = workspaceRecordToContentItem(payload.data);
+        if (!revised) throw new Error("The revised draft is incomplete");
+        setState((current) => ({
+          ...current,
+          content: current.content.map((entry) => entry.id === id ? revised : entry),
+        }));
+        setToast("New audited draft version created");
+      } catch (error) {
+        setToast(error instanceof Error ? error.message : "Regeneration failed");
+      }
+      return;
+    }
     const regenerated = {
       ...item,
       status: "drafting" as ContentStatus,
@@ -1195,7 +1230,20 @@ export function ContentEngineApp({ initialReviewId, userEmail, role }: ContentEn
     finishPipeline(regenerated, false);
   }
 
-  function rejectContent(id: string) {
+  async function rejectContent(id: string) {
+    const item = state.content.find((entry) => entry.id === id);
+    if (item?.serverBacked) {
+      try {
+        const response = await fetch(`/api/workspace/content/${encodeURIComponent(id)}/reject`, {
+          method: "POST",
+        });
+        const payload = await response.json() as { message?: string };
+        if (!response.ok) throw new Error(payload.message || "Rejection failed");
+      } catch (error) {
+        setToast(error instanceof Error ? error.message : "Rejection failed");
+        return;
+      }
+    }
     setContentItem(id, { status: "rejected" });
     setToast("Rejected");
   }
@@ -2819,6 +2867,9 @@ function ReviewView({
                 tone="red"
               />
             </div>
+            {selected.serverBacked && (
+              <ContentAuditTimeline contentId={selected.id} key={`audit-${selected.id}`} />
+            )}
             <div className="border border-white/10 bg-[#0d0f12] p-4">
               <p className="mb-3 font-mono text-xs uppercase text-white/45">
                 Eval results
@@ -4826,6 +4877,91 @@ function ContentDetail({
       )}
     </div>
   );
+}
+
+function ContentAuditTimeline({ contentId }: { contentId: string }) {
+  const [events, setEvents] = useState<ContentAuditEvent[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    let active = true;
+    void fetch(`/api/workspace/content/${encodeURIComponent(contentId)}/audit`)
+      .then(async (response) => {
+        const payload = await response.json() as { data?: ContentAuditEvent[]; message?: string };
+        if (!response.ok) throw new Error(payload.message || "Could not load audit history");
+        if (active) setEvents(payload.data ?? []);
+      })
+      .catch((loadError) => {
+        if (active) setError(loadError instanceof Error ? loadError.message : "Could not load audit history");
+      })
+      .finally(() => {
+        if (active) setLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [contentId]);
+
+  return (
+    <section className="border border-white/10 bg-[#0d0f12] p-4">
+      <div className="flex items-center justify-between gap-3">
+        <div>
+          <p className="font-mono text-xs uppercase text-white/45">Audit trail</p>
+          <p className="mt-1 text-sm text-white/55">Who changed this piece, what changed, and when.</p>
+        </div>
+        <Badge tone="gray">{events.length} events</Badge>
+      </div>
+      {loading && <p className="mt-4 text-sm text-white/45">Loading history…</p>}
+      {error && <p className="mt-4 text-sm text-red-300">{error}</p>}
+      {!loading && !error && events.length === 0 && (
+        <p className="mt-4 text-sm text-white/45">No recorded changes yet.</p>
+      )}
+      <div className="mt-4 space-y-3">
+        {events.map((event) => (
+          <article className="border-l-2 border-[var(--clay-500)] bg-white/[0.025] px-4 py-3" key={event.id}>
+            <div className="flex flex-wrap items-start justify-between gap-2">
+              <div>
+                <p className="font-medium text-white/90">{auditActionLabel(event.action)}</p>
+                <p className="mt-1 text-xs text-white/45">
+                  {event.actor_email} · {event.actor_type}
+                  {event.content_version ? ` · Version ${event.content_version}` : ""}
+                </p>
+              </div>
+              <time className="text-xs text-white/40" dateTime={event.created_at}>
+                {formatDateTime(event.created_at)}
+              </time>
+            </div>
+            {event.changes.length > 0 && (
+              <div className="mt-3 space-y-2">
+                {event.changes.map((change, index) => (
+                  <div className="grid gap-1 text-xs md:grid-cols-[140px_1fr]" key={`${change.field}-${index}`}>
+                    <span className="font-mono uppercase text-white/40">{change.field.replaceAll("_", " ")}</span>
+                    <span className="text-white/65">
+                      {auditValue(change.before)} → {auditValue(change.after)}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </article>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function auditActionLabel(action: string) {
+  return action
+    .replace(/^content\./, "")
+    .replaceAll("_", " ")
+    .replace(/\b\w/g, (letter) => letter.toUpperCase());
+}
+
+function auditValue(value: unknown) {
+  if (value === undefined || value === null || value === "") return "None";
+  const rendered = typeof value === "string" ? value : JSON.stringify(value);
+  return rendered.length > 220 ? `${rendered.slice(0, 217)}…` : rendered;
 }
 
 function renderAnnotatedDraft(body: string, comments: ReviewComment[]) {

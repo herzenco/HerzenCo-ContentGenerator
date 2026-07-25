@@ -1,4 +1,5 @@
 import { timingSafeEqual } from "node:crypto";
+import { recordContentAudit } from "@/lib/content-audit";
 import { createSupabaseAdminClient } from "@/utils/supabase/admin";
 
 export const runtime = "nodejs";
@@ -33,7 +34,7 @@ export async function POST(request: Request) {
   const admin = createSupabaseAdminClient();
   const { data: item, error: itemError } = await admin
     .from("content_items")
-    .select("id, status, properties!inner(base_url)")
+    .select("id, status, published_url, properties!inner(base_url)")
     .eq("id", body.contentId)
     .eq("status", "published")
     .maybeSingle();
@@ -53,6 +54,13 @@ export async function POST(request: Request) {
     .update({ published_url: canonicalUrl })
     .eq("id", body.contentId);
   if (updateError) throw new Error(updateError.message);
+  await recordContentAudit({
+    contentItemId: body.contentId,
+    actor: { type: "website", email: `website@${receivedHost}` },
+    action: "content.url_confirmed",
+    changes: [{ field: "published_url", before: item.published_url, after: canonicalUrl }],
+    metadata: { host: receivedHost },
+  });
 
   return Response.json({
     data: { id: body.contentId, status: "published", publishedUrl: canonicalUrl },

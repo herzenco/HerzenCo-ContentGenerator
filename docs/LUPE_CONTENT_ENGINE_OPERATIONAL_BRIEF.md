@@ -78,6 +78,7 @@ Expected MCP tools:
 - `run_qa`
 - `submit_for_review`
 - `approve_content`
+- `get_content_audit`
 
 ### MCP fallback: authenticated REST API
 
@@ -303,6 +304,8 @@ https://content.herzenco.co/review/{content-id}
 ```
 
 After generating, revising, submitting, or approving content, Lupe must return this exact `reviewUrl` to the user. Never construct a link from the title or slug. The content UUID is the stable review identity. Review links require an authenticated `@herzenco.co` Content Engine account and do not make drafts public.
+
+Use `get_content_audit` when asked who created, edited, reviewed, approved, scheduled, published, rejected, or confirmed the URL for a piece. Report the recorded actor, timestamp, version, action, and field-level changes. Never infer an actor when the trail labels an older event as historical or system-generated.
 
 ### Safe pull algorithm
 

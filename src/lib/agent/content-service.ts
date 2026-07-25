@@ -3,6 +3,7 @@ import "server-only";
 import { createHash } from "node:crypto";
 import { getProvider } from "@/lib/ai/providers";
 import type { AgentPrincipal } from "@/lib/agent/auth";
+import { recordContentAudit, type ContentAuditChange } from "@/lib/content-audit";
 import { triggerWebsiteBuild } from "@/lib/published-content";
 import { createSupabaseAdminClient } from "@/utils/supabase/admin";
 
@@ -158,6 +159,9 @@ export async function addContentReviewComment(
   await auditAgent(principal, "content.comment", "content_item", input.id, {
     commentId: data.id,
     contentVersion: content.version,
+    version: content.version,
+    changes: [{ field: "comment", before: null, after: input.body.trim() }],
+    anchorText: input.anchorText?.trim() || null,
   });
   return data;
 }
@@ -222,6 +226,22 @@ export async function publishWorkspaceContent(id: string, actorUserId: string | 
     metadata: { property: property.slug, source: "human_review" },
   });
   if (auditError) throw new Error(`audit_failed: ${auditError.message}`);
+  await recordContentAudit({
+    contentItemId: id,
+    actor: {
+      userId: actorUserId,
+      type: actorUserId ? "user" : "system",
+    },
+    action: "content.publish",
+    version: latest.version,
+    changes: [
+      { field: "status", before: content.status, after: "published" },
+      { field: "slug", before: null, after: slug },
+      { field: "published_at", before: content.publishedAt, after: publishedAt },
+      { field: "published_url", before: content.publishedUrl, after: publishedUrl },
+    ],
+    metadata: { property: property.slug, source: actorUserId ? "human_review" : "scheduled_cron" },
+  });
   let websiteBuildTriggered = false;
   let websiteBuildError: string | null = null;
   if (property.revalidate_url) {
@@ -349,6 +369,13 @@ export async function generateAgentDraft(
       contentType,
       model: result.model,
       qaStatus: "completed",
+      version: 1,
+      changes: [
+        { field: "title", before: null, after: title },
+        { field: "body", before: null, after: body },
+        { field: "excerpt", before: null, after: excerpt },
+        { field: "status", before: null, after: "needs_review" },
+      ],
     });
     return getAgentContent(item.id);
   } catch (error) {
@@ -358,6 +385,13 @@ export async function generateAgentDraft(
       model: result.model,
       qaStatus: "pending",
       qaError: safeProviderError(error),
+      version: 1,
+      changes: [
+        { field: "title", before: null, after: title },
+        { field: "body", before: null, after: body },
+        { field: "excerpt", before: null, after: excerpt },
+        { field: "status", before: null, after: "needs_review" },
+      ],
     });
     return {
       ...(await getAgentContent(item.id)),
@@ -420,7 +454,15 @@ export async function reviseAgentDraft(
     language: context.language,
   });
   await persistQa(current.id, savedVersion.id, qa, admin);
-  await auditAgent(principal, "content.revise", "content_item", current.id, { version, model: result.model });
+  await auditAgent(principal, "content.revise", "content_item", current.id, {
+    version,
+    model: result.model,
+    changes: [
+      { field: "title", before: latest.title, after: title },
+      { field: "body", before: latest.body_mdx, after: body },
+      { field: "excerpt", before: latest.excerpt, after: excerpt },
+    ],
+  });
   return getAgentContent(current.id);
 }
 
@@ -443,6 +485,11 @@ export async function runAgentQa(id: string, principal: AgentPrincipal) {
     version: latest.version,
     reviewer: "anthropic",
     model: qa.model,
+    changes: [
+      { field: "quality_score", before: current.qualityScore, after: qa.qualityScore },
+      { field: "meta_title", before: latest.meta_title, after: qa.metaTitle },
+      { field: "meta_description", before: latest.meta_description, after: qa.metaDescription },
+    ],
   });
   return getAgentContent(current.id);
 }
@@ -479,6 +526,11 @@ export async function reviseAgentDraftFromComments(
   await auditAgent(principal, "content.revise_from_comments", "content_item", id, {
     commentIds,
     version: revised.version,
+    changes: comments.map((comment) => ({
+      field: `comment:${comment.id}:status`,
+      before: "open",
+      after: "applied",
+    })),
   });
   return {
     ...revised,
@@ -498,7 +550,29 @@ export async function submitAgentDraftForReview(id: string, principal: AgentPrin
     .maybeSingle();
   if (error) throw new Error(error.message);
   if (!data) throw new Error("content_not_found_or_already_published");
-  await auditAgent(principal, "content.submit_review", "content_item", id, {});
+  await auditAgent(principal, "content.submit_review", "content_item", id, {
+    changes: [{ field: "status", before: "draft", after: "needs_review" }],
+  });
+  return getAgentContent(id);
+}
+
+export async function rejectAgentContent(id: string, principal: AgentPrincipal) {
+  const current = await getAgentContent(id);
+  if (current.status === "published") throw new Error("published_content_cannot_be_rejected");
+  const admin = createSupabaseAdminClient();
+  const { data, error } = await admin
+    .from("content_items")
+    .update({ status: "rejected" })
+    .eq("id", id)
+    .neq("status", "published")
+    .select("id")
+    .maybeSingle();
+  if (error) throw new Error(error.message);
+  if (!data) throw new Error("content_not_found_or_published");
+  await auditAgent(principal, "content.reject", "content_item", id, {
+    version: current.version,
+    changes: [{ field: "status", before: current.status, after: "rejected" }],
+  });
   return getAgentContent(id);
 }
 
@@ -526,7 +600,13 @@ export async function approveAgentContent(
     .eq("id", id)
     .eq("status", "approved");
   if (error) throw new Error(error.message);
-  await auditAgent(principal, "content.schedule", "content_item", id, { publishAt });
+  await auditAgent(principal, "content.schedule", "content_item", id, {
+    publishAt,
+    changes: [
+      { field: "status", before: "approved", after: "scheduled" },
+      { field: "publish_at", before: null, after: new Date(publishAt).toISOString() },
+    ],
+  });
   return getAgentContent(id);
 }
 
@@ -545,7 +625,9 @@ async function markContentApproved(id: string, principal: AgentPrincipal) {
     if (current.status === "approved") return current;
     throw new Error("content_not_found_or_not_awaiting_review");
   }
-  await auditAgent(principal, "content.approve", "content_item", id, {});
+  await auditAgent(principal, "content.approve", "content_item", id, {
+    changes: [{ field: "status", before: "needs_review", after: "approved" }],
+  });
   return getAgentContent(id);
 }
 
@@ -840,4 +922,22 @@ async function auditAgent(
     metadata,
   });
   if (error) throw new Error(`audit_failed: ${error.message}`);
+  if (targetType === "content_item") {
+    const changes = Array.isArray(metadata.changes)
+      ? (metadata.changes as ContentAuditChange[])
+      : [];
+    await recordContentAudit({
+      contentItemId: targetId,
+      actor: {
+        userId: principal.actorUserId,
+        type: principal.apiKeyId ? "agent" : "user",
+      },
+      action,
+      version: typeof metadata.version === "number" ? metadata.version : null,
+      changes,
+      metadata: Object.fromEntries(
+        Object.entries(metadata).filter(([key]) => key !== "changes"),
+      ),
+    });
+  }
 }
