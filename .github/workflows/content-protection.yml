@@ -1,0 +1,41 @@
+name: Content protection
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  protect-saved-content:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out full history
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Reject content-risking changes
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          PUSH_BASE: ${{ github.event.before }}
+          PR_BASE: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.sha }}
+        run: |
+          if [ "$EVENT_NAME" = "pull_request" ]; then
+            base_sha="$PR_BASE"
+          elif [ "$PUSH_BASE" = "0000000000000000000000000000000000000000" ]; then
+            base_sha=$(git rev-list --max-parents=0 "$HEAD_SHA" | head -n 1)
+          else
+            base_sha="$PUSH_BASE"
+          fi
+          python3 .agents/skills/protect-generated-content/scripts/pre_push_guard.py \
+            --base "$base_sha" \
+            --head "$HEAD_SHA"
+
+      - name: Verify protection guard behavior
+        run: |
+          python3 -m unittest discover \
+            -s .agents/skills/protect-generated-content/tests \
+            -p "test_*.py"

@@ -4,6 +4,7 @@ import {
   Activity,
   Archive,
   BarChart3,
+  BookOpen,
   CalendarDays,
   Check,
   FileText,
@@ -38,6 +39,7 @@ import type { AppRole } from "@/lib/auth/roles";
 
 type View = "home" | "content" | "properties" | "settings";
 type ContentMode = "list" | "calendar" | "ideas";
+type PropertyTab = "profile" | "feedback" | "research" | "content" | "performance" | "settings";
 
 type PropertySlug = string;
 type ContentStatus =
@@ -47,6 +49,7 @@ type ContentStatus =
   | "approved"
   | "scheduled"
   | "published"
+  | "unpublished"
   | "rejected"
   | "failed";
 type TopicStatus = "backlog" | "briefed" | "drafted" | "published" | "rejected";
@@ -92,6 +95,13 @@ interface ContentItem {
   qualityScore: number | null;
   publishAt: string;
   publishedAt: string;
+  publishedUrl?: string;
+  unpublishedAt?: string;
+  unpublishedBy?: string;
+  unpublishReason?: string;
+  publicationSyncStatus?: "pending" | "synced" | "failed";
+  publicationSyncError?: string;
+  publicationSyncUpdatedAt?: string;
   createdAt: string;
   excerpt: string;
   metaTitle: string;
@@ -124,6 +134,13 @@ interface WorkspaceContentRecord {
   qualityScore: number | null;
   publishAt: string | null;
   publishedAt: string | null;
+  publishedUrl?: string | null;
+  unpublishedAt?: string | null;
+  unpublishedBy?: string | null;
+  unpublishReason?: string | null;
+  publicationSyncStatus?: "pending" | "synced" | "failed" | null;
+  publicationSyncError?: string | null;
+  publicationSyncUpdatedAt?: string | null;
   createdAt: string;
   latestVersion?: {
     title?: string;
@@ -857,8 +874,7 @@ export function ContentEngineApp({ initialReviewId, userEmail, role }: ContentEn
   );
   const [selectedPropertySlug, setSelectedPropertySlug] =
     useState<PropertySlug>("herzenco");
-  const [propertyTab, setPropertyTab] =
-    useState<"profile" | "content" | "performance" | "settings">("profile");
+  const [propertyTab, setPropertyTab] = useState<PropertyTab>("profile");
   const [performanceDays, setPerformanceDays] = useState<7 | 30 | 90>(30);
   const [query, setQuery] = useState("");
   const [toast, setToast] = useState("Local workspace ready");
@@ -1264,6 +1280,105 @@ export function ContentEngineApp({ initialReviewId, userEmail, role }: ContentEn
     void persistPublishedContent({ ...item, ...patch });
   }
 
+  async function unpublishContent(id: string) {
+    if (role !== "admin" && role !== "publisher") {
+      setToast("Unpublishing requires publisher access.");
+      return;
+    }
+    const item = state.content.find((entry) => entry.id === id);
+    if (!item?.serverBacked || item.status !== "published") return;
+    const reason = window.prompt(
+      "Why are you unpublishing this content? This is optional and will be recorded in the audit trail.",
+      "",
+    );
+    if (reason === null) return;
+    if (!window.confirm(`Unpublish “${item.title}”? This removes it from the public feed but preserves all history.`)) return;
+
+    setToast("Unpublishing and synchronizing the website…");
+    try {
+      const response = await fetch(
+        `/api/workspace/content/${encodeURIComponent(id)}/unpublish`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ reason: reason.trim() || undefined }),
+        },
+      );
+      const payload = (await response.json()) as {
+        data?: {
+          status?: string;
+          unpublishedAt?: string;
+          unpublishReason?: string | null;
+          publicationSyncStatus?: "pending" | "synced" | "failed";
+          publicationSyncError?: string | null;
+        };
+        message?: string;
+      };
+      if (!response.ok || !payload.data) {
+        throw new Error(payload.message || "Unpublishing failed");
+      }
+      setContentItem(id, {
+        status: "unpublished",
+        unpublishedAt: payload.data.unpublishedAt ?? new Date().toISOString(),
+        unpublishReason: payload.data.unpublishReason ?? reason.trim(),
+        publicationSyncStatus: payload.data.publicationSyncStatus,
+        publicationSyncError: payload.data.publicationSyncError ?? undefined,
+      });
+      setToast(
+        payload.data.publicationSyncStatus === "failed"
+          ? "Unpublished in Supabase; website synchronization needs attention."
+          : "Unpublished and website synchronization requested.",
+      );
+    } catch (error) {
+      setToast(error instanceof Error ? error.message : "Unpublishing failed");
+    }
+  }
+
+  async function republishContent(id: string) {
+    if (role !== "admin" && role !== "publisher") {
+      setToast("Republishing requires publisher access.");
+      return;
+    }
+    const item = state.content.find((entry) => entry.id === id);
+    if (!item?.serverBacked || item.status !== "unpublished") return;
+    if (!window.confirm(`Republish “${item.title}” from its latest preserved version?`)) return;
+
+    setToast("Republishing and synchronizing the website…");
+    try {
+      const response = await fetch(
+        `/api/workspace/content/${encodeURIComponent(id)}/republish`,
+        { method: "POST" },
+      );
+      const payload = (await response.json()) as {
+        data?: {
+          status?: string;
+          publishedAt?: string;
+          publishedUrl?: string | null;
+          publicationSyncStatus?: "pending" | "synced" | "failed";
+          publicationSyncError?: string | null;
+        };
+        message?: string;
+      };
+      if (!response.ok || !payload.data) {
+        throw new Error(payload.message || "Republishing failed");
+      }
+      setContentItem(id, {
+        status: "published",
+        publishedAt: payload.data.publishedAt ?? new Date().toISOString(),
+        publishedUrl: payload.data.publishedUrl ?? item.publishedUrl,
+        publicationSyncStatus: payload.data.publicationSyncStatus,
+        publicationSyncError: payload.data.publicationSyncError ?? undefined,
+      });
+      setToast(
+        payload.data.publicationSyncStatus === "failed"
+          ? "Republished in Supabase; website synchronization needs attention."
+          : "Republished and website synchronization requested.",
+      );
+    } catch (error) {
+      setToast(error instanceof Error ? error.message : "Republishing failed");
+    }
+  }
+
   function addTopic(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const data = new FormData(event.currentTarget);
@@ -1324,7 +1439,7 @@ export function ContentEngineApp({ initialReviewId, userEmail, role }: ContentEn
       (item) =>
         item.property === propertySlug &&
         item.source === "autopilot" &&
-        !["published", "rejected", "failed"].includes(item.status),
+        !["published", "unpublished", "rejected", "failed"].includes(item.status),
     );
     if (unpublishedAutopilot.length >= setting.maxQueued) {
       addAutopilotWarning(
@@ -1537,8 +1652,8 @@ export function ContentEngineApp({ initialReviewId, userEmail, role }: ContentEn
 
   return (
     <main className="herzen-engine min-h-screen">
-      <div className="grid min-h-screen lg:grid-cols-[256px_1fr]">
-        <aside className="engine-sidebar border-r px-4 py-6">
+      <div className={`grid min-h-screen ${initialReviewId ? "" : "lg:grid-cols-[256px_1fr]"}`}>
+        {!initialReviewId && <aside className="engine-sidebar hidden border-r px-4 py-6 lg:block">
           <div className="flex items-center gap-3 px-2">
             <div className="flex h-10 w-10 items-center justify-center border border-[var(--border-on-dark)] text-sm font-medium text-[var(--paper-50)]">
               H
@@ -1591,24 +1706,24 @@ export function ContentEngineApp({ initialReviewId, userEmail, role }: ContentEn
               {toast}
             </div>
           </div>
-        </aside>
+        </aside>}
 
         <section className="engine-workspace min-w-0">
-          <header className="engine-header sticky top-0 z-20 flex flex-col gap-4 border-b px-6 py-5 xl:flex-row xl:items-center xl:justify-between">
+          <header className="engine-header sticky top-0 z-20 flex items-center justify-between gap-3 border-b px-4 py-3 sm:px-6 sm:py-4 xl:py-5">
             <div>
-              <p className="editorial-eyebrow">
-                {activeViewLabel(activeView)}
+              <p className="editorial-eyebrow hidden sm:block">
+                {initialReviewId ? "Shared review" : activeViewLabel(activeView)}
               </p>
-              <h1 className="editorial-title mt-1 text-3xl text-[var(--text-primary)]">
-                {viewTitle(activeView)}
+              <h1 className="editorial-title text-xl text-[var(--text-primary)] sm:mt-1 sm:text-3xl">
+                {initialReviewId ? "Review content" : viewTitle(activeView)}
               </h1>
             </div>
-            <div className="flex flex-wrap items-center gap-2">
+            <div className="flex min-w-0 items-center justify-end gap-2">
               <div className="hidden items-center gap-2 border border-[var(--border-hairline)] bg-[var(--surface-card)] px-3 py-2 text-sm text-[var(--text-secondary)] md:flex">
                 <KeyRound size={15} />
                 <span className="max-w-52 truncate">{userEmail}</span>
               </div>
-              <label className="flex min-w-0 items-center gap-2 border border-[var(--border-soft)] bg-[var(--surface-card)] px-3 py-2 text-sm text-[var(--text-secondary)]">
+              {!initialReviewId && <label className="hidden min-w-0 items-center gap-2 border border-[var(--border-soft)] bg-[var(--surface-card)] px-3 py-2 text-sm text-[var(--text-secondary)] sm:flex">
                 <Search size={16} />
                 <input
                   className="w-48 bg-transparent text-[var(--text-primary)] outline-none placeholder:text-[var(--text-muted)]"
@@ -1616,27 +1731,29 @@ export function ContentEngineApp({ initialReviewId, userEmail, role }: ContentEn
                   placeholder="Search content"
                   value={query}
                 />
-              </label>
-              <button
-                className="inline-flex items-center gap-2 rounded-[var(--radius-sm)] border border-[var(--surface-ink)] bg-[var(--surface-ink)] px-4 py-2 text-xs font-medium uppercase tracking-[var(--tracking-wide)] text-[var(--text-on-dark)] hover:bg-[var(--ink-700)]"
+              </label>}
+              {!initialReviewId && <button
+                aria-label="Create new content"
+                className="inline-flex h-10 items-center justify-center gap-2 rounded-[var(--radius-sm)] border border-[var(--surface-ink)] bg-[var(--surface-ink)] px-3 text-xs font-medium uppercase tracking-[var(--tracking-wide)] text-[var(--text-on-dark)] hover:bg-[var(--ink-700)] sm:px-4"
                 onClick={() => setActiveView("home")}
                 type="button"
               >
                 <Zap size={16} />
-                New
-              </button>
+                <span className="hidden sm:inline">New</span>
+              </button>}
               <button
-                className="inline-flex items-center gap-2 rounded-[var(--radius-sm)] border border-[var(--border-strong)] px-4 py-2 text-xs font-medium uppercase tracking-[var(--tracking-wide)] text-[var(--text-primary)] hover:bg-[var(--surface-raised)]"
+                aria-label="Sign out"
+                className="inline-flex h-10 items-center justify-center gap-2 rounded-[var(--radius-sm)] border border-[var(--border-strong)] px-3 text-xs font-medium uppercase tracking-[var(--tracking-wide)] text-[var(--text-primary)] hover:bg-[var(--surface-raised)] sm:px-4"
                 onClick={signOut}
                 type="button"
               >
                 <LogOut size={16} />
-                Sign out
+                <span className="hidden sm:inline">Sign out</span>
               </button>
             </div>
           </header>
 
-          <div className="engine-content p-6 xl:p-8">
+          <div className="engine-content p-3 pb-24 sm:p-6 sm:pb-24 xl:p-8">
             {activeView === "home" && (
               <HomeView
                 approvalOnly={role === "reviewer"}
@@ -1677,16 +1794,20 @@ export function ContentEngineApp({ initialReviewId, userEmail, role }: ContentEn
             )}
             {activeView === "content" && (
               <ContentView
+                canManagePublication={role === "admin" || role === "publisher"}
                 content={filteredContent}
                 contentMode={contentMode}
+                focusedReview={Boolean(initialReviewId)}
                 onAddTopic={addTopic}
                 onApprove={approveContent}
                 onDraft={draftFromTopic}
                 onRegenerate={regenerateContent}
                 onModeChange={setContentMode}
                 onPublish={publishNow}
+                onRepublish={republishContent}
                 onReject={rejectContent}
                 onSelect={(id) => setSelectedContentId(id)}
+                onUnpublish={unpublishContent}
                 properties={state.properties}
                 selectedContentId={selectedContentId}
                 topics={state.topics}
@@ -1790,6 +1911,34 @@ export function ContentEngineApp({ initialReviewId, userEmail, role }: ContentEn
           </div>
         </section>
       </div>
+      {!initialReviewId && <nav className="mobile-tab-bar lg:hidden" aria-label="Primary">
+        {navItems.map((item) => (
+          <button
+            aria-current={activeView === item.view ? "page" : undefined}
+            className={activeView === item.view ? "is-active" : ""}
+            key={item.view}
+            onClick={() => setActiveView(item.view)}
+            type="button"
+          >
+            <span className="relative">
+              {item.icon}
+              {item.view === "home" && reviewCount > 0 && (
+                <span className="mobile-tab-count">{reviewCount}</span>
+              )}
+            </span>
+            <span>{item.label}</span>
+          </button>
+        ))}
+        <button
+          aria-current={activeView === "settings" ? "page" : undefined}
+          className={activeView === "settings" ? "is-active" : ""}
+          onClick={() => setActiveView("settings")}
+          type="button"
+        >
+          <Settings size={17} />
+          <span>Settings</span>
+        </button>
+      </nav>}
       {approvalRequest && (
         <div className="fixed inset-0 z-50 grid place-items-center bg-black/55 p-4">
           <section
@@ -2167,8 +2316,13 @@ function HomeView({
           </div>
         </Panel>
 
-        <div className="space-y-5">
-          <Panel title="Coming up">
+        <div className="space-y-3 xl:space-y-5">
+          <details className="mobile-disclosure">
+            <summary>
+              <span>Coming up</span>
+              <span className="mobile-disclosure-count">{comingUp.length}</span>
+            </summary>
+            <Panel>
             <div className="space-y-3">
               {comingUp.map((item) => (
                 <button
@@ -2196,9 +2350,17 @@ function HomeView({
                 Full calendar
               </button>
             </div>
-          </Panel>
+            </Panel>
+          </details>
 
-          <Panel title="Pulse">
+          <details className="mobile-disclosure">
+            <summary>
+              <span>Pulse</span>
+              <span className="text-xs normal-case tracking-normal text-[var(--text-muted)]">
+                7 days
+              </span>
+            </summary>
+            <Panel>
             <div className="space-y-3">
               {properties.map((property) => (
                 <button
@@ -2218,7 +2380,8 @@ function HomeView({
               ))}
               {!gscConnected && <Badge tone="amber">Pageviews only</Badge>}
             </div>
-          </Panel>
+            </Panel>
+          </details>
         </div>
       </div>
     </div>
@@ -2269,8 +2432,10 @@ function NeedsReviewCard({
         </div>
       </div>
 
-      <div className="mt-4 grid gap-3 lg:grid-cols-[minmax(0,1.25fr)_minmax(0,1fr)]">
-        <div className="needs-you-detail">
+      <details className="mobile-review-details">
+        <summary>Review details</summary>
+        <div className="mt-3 grid gap-3 lg:mt-4 lg:grid-cols-[minmax(0,1.25fr)_minmax(0,1fr)]">
+          <div className="needs-you-detail">
           <p className="text-xs font-semibold uppercase tracking-[0.14em] text-[var(--clay-600)]">
             {failedChecks.length > 0 ? "Why this stopped" : "Review status"}
           </p>
@@ -2282,9 +2447,9 @@ function NeedsReviewCard({
               ? "No automated QA results are attached to this draft."
               : `${failedChecks.length} ${failedChecks.length === 1 ? "check needs" : "checks need"} attention · ${passedChecks} passed`}
           </p>
-        </div>
+          </div>
 
-        <div className="needs-you-detail">
+          <div className="needs-you-detail">
           <p className="text-xs font-semibold uppercase tracking-[0.14em] text-[var(--text-secondary)]">
             Review context
           </p>
@@ -2296,31 +2461,32 @@ function NeedsReviewCard({
             <dt className="text-[var(--text-muted)]">Source</dt>
             <dd className="capitalize text-[var(--text-primary)]">{sourceLabel(item.source)}</dd>
           </dl>
+          </div>
         </div>
-      </div>
 
-      {failedChecks.length > 0 && (
-        <div className="mt-3 border-t border-[var(--border-hairline)] pt-3">
-          <p className="mb-2 text-xs font-semibold uppercase tracking-[0.14em] text-[var(--text-secondary)]">
-            Checks to review
-          </p>
-          <ul className="grid gap-2 md:grid-cols-2">
-            {failedChecks.slice(0, 4).map((result) => (
-              <li className="flex gap-2 text-sm" key={result.name}>
-                <span className="mt-1 h-2 w-2 shrink-0 bg-[var(--clay-500)]" aria-hidden="true" />
-                <span>
-                  <strong className="font-medium text-[var(--text-primary)]">
-                    {humanizeEval(result.name, result.detail)}
-                  </strong>
-                  <span className="block text-[var(--text-secondary)]">{result.detail}</span>
-                </span>
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
+        {failedChecks.length > 0 && (
+          <div className="mt-3 border-t border-[var(--border-hairline)] pt-3">
+            <p className="mb-2 text-xs font-semibold uppercase tracking-[0.14em] text-[var(--text-secondary)]">
+              Checks to review
+            </p>
+            <ul className="grid gap-2 md:grid-cols-2">
+              {failedChecks.slice(0, 4).map((result) => (
+                <li className="flex gap-2 text-sm" key={result.name}>
+                  <span className="mt-1 h-2 w-2 shrink-0 bg-[var(--clay-500)]" aria-hidden="true" />
+                  <span>
+                    <strong className="font-medium text-[var(--text-primary)]">
+                      {humanizeEval(result.name, result.detail)}
+                    </strong>
+                    <span className="block text-[var(--text-secondary)]">{result.detail}</span>
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+      </details>
 
-      <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-[var(--border-hairline)] pt-4">
+      <div className="mobile-card-actions mt-4 flex flex-wrap items-center gap-2 border-t border-[var(--border-hairline)] pt-4">
         <ActionButton icon={<Check size={16} />} label={publishAction} onClick={onApprove} tone="green" />
         <ActionButton icon={<FileText size={16} />} label="Review full draft" onClick={onOpen} tone="cyan" />
         <ActionButton icon={<RefreshCw size={16} />} label="Regenerate draft" onClick={onRegenerate} tone="cyan" />
@@ -2330,30 +2496,38 @@ function NeedsReviewCard({
 }
 
 function ContentView({
+  canManagePublication,
   content,
   contentMode,
+  focusedReview,
   onAddTopic,
   onApprove,
   onDraft,
   onRegenerate,
   onModeChange,
   onPublish,
+  onRepublish,
   onReject,
   onSelect,
+  onUnpublish,
   properties,
   selectedContentId,
   topics,
 }: {
+  canManagePublication: boolean;
   content: ContentItem[];
   contentMode: ContentMode;
+  focusedReview: boolean;
   onAddTopic: (event: FormEvent<HTMLFormElement>) => void;
   onApprove: (id: string) => void;
   onDraft: (topic: Topic) => void;
   onRegenerate: (id: string) => void;
   onModeChange: (mode: ContentMode) => void;
   onPublish: (id: string) => void;
+  onRepublish: (id: string) => void;
   onReject: (id: string) => void;
   onSelect: (id: string) => void;
+  onUnpublish: (id: string) => void;
   properties: PropertyConfig[];
   selectedContentId: string;
   topics: Topic[];
@@ -2367,6 +2541,20 @@ function ContentView({
       (statusFilter === "all" || item.status === statusFilter) &&
       (sourceFilter === "all" || item.source === sourceFilter),
   );
+
+  if (focusedReview) {
+    return (
+      <ReviewView
+        content={content}
+        focused
+        onApprove={onApprove}
+        onRegenerate={onRegenerate}
+        onReject={onReject}
+        onSelect={onSelect}
+        selectedContentId={selectedContentId}
+      />
+    );
+  }
 
   return (
     <div className="space-y-5">
@@ -2399,7 +2587,7 @@ function ContentView({
               </select>
               <select className={fieldClass} onChange={(event) => setStatusFilter(event.target.value as ContentStatus | "all")} value={statusFilter}>
                 <option value="all">All statuses</option>
-                {(["drafting", "qa", "needs_review", "approved", "scheduled", "published", "rejected", "failed"] as ContentStatus[]).map((status) => (
+                {(["drafting", "qa", "needs_review", "approved", "scheduled", "published", "unpublished", "rejected", "failed"] as ContentStatus[]).map((status) => (
                   <option key={status} value={status}>{statusLabel(status)}</option>
                 ))}
               </select>
@@ -2410,7 +2598,14 @@ function ContentView({
                 ))}
               </select>
             </div>
-            <ContentTable content={filtered} onPublish={onPublish} onSelect={onSelect} />
+            <ContentTable
+              canManagePublication={canManagePublication}
+              content={filtered}
+              onPublish={onPublish}
+              onRepublish={onRepublish}
+              onSelect={onSelect}
+              onUnpublish={onUnpublish}
+            />
           </Panel>
           <ReviewView
             content={content}
@@ -2758,6 +2953,7 @@ function OverviewView({
 
 function ReviewView({
   content,
+  focused = false,
   onApprove,
   onRegenerate,
   onReject,
@@ -2765,6 +2961,7 @@ function ReviewView({
   selectedContentId,
 }: {
   content: ContentItem[];
+  focused?: boolean;
   onApprove: (id: string) => void;
   onRegenerate: (id: string) => void;
   onReject: (id: string) => void;
@@ -2788,8 +2985,8 @@ function ReviewView({
   }
 
   return (
-    <div className="grid gap-5 xl:grid-cols-[380px_minmax(0,1fr)]">
-      <Panel title="Queue">
+    <div className={focused ? "mx-auto w-full max-w-6xl" : "grid gap-5 xl:grid-cols-[380px_minmax(0,1fr)]"}>
+      {!focused && <Panel title="Queue">
         <div className="space-y-2">
           {queue.length === 0 && (
             <EmptyState icon={<ShieldCheck size={20} />} label="Queue clear" />
@@ -2818,7 +3015,7 @@ function ReviewView({
             </button>
           ))}
         </div>
-      </Panel>
+      </Panel>}
 
       <Panel title="Review">
         {selected ? (
@@ -3098,7 +3295,7 @@ function PropertiesView({
   onRunAutopilot: (property: PropertySlug) => void;
   onSelectProperty: (slug: PropertySlug) => void;
   onSelectContent: (id: string) => void;
-  onSetTab: (tab: "profile" | "content" | "performance" | "settings") => void;
+  onSetTab: (tab: PropertyTab) => void;
   onUpdateAutopilotSetting: (property: PropertySlug, patch: Partial<AutopilotSetting>) => void;
   onUpdateBrand: (property: PropertySlug, patch: Partial<BrandProfile>) => void;
   onUpdateDoc: (doc: BrandContextDoc) => void;
@@ -3107,7 +3304,7 @@ function PropertiesView({
   onPerformanceDaysChange: (days: 7 | 30 | 90) => void;
   performanceDays: 7 | 30 | 90;
   properties: PropertyConfig[];
-  propertyTab: "profile" | "content" | "performance" | "settings";
+  propertyTab: PropertyTab;
   selectedPropertySlug: PropertySlug;
 }) {
   const [showAddProperty, setShowAddProperty] = useState(false);
@@ -3148,9 +3345,11 @@ function PropertiesView({
   const propertySections: {
     icon: ReactNode;
     label: string;
-    tab: "profile" | "content" | "performance" | "settings";
+    tab: PropertyTab;
   }[] = [
     { icon: <FileText size={16} />, label: "Brand context", tab: "profile" },
+    { icon: <MessageSquare size={16} />, label: "Feedback + Rules", tab: "feedback" },
+    { icon: <BookOpen size={16} />, label: "Research", tab: "research" },
     { icon: <ListChecks size={16} />, label: "Content", tab: "content" },
     { icon: <BarChart3 size={16} />, label: "Performance", tab: "performance" },
     { icon: <Settings size={16} />, label: "Publishing", tab: "settings" },
@@ -3496,7 +3695,7 @@ function PropertiesView({
       </div>
 
       <Panel title={selectedProperty.domain}>
-        <div className="mb-5 grid gap-2 sm:grid-cols-4">
+        <div className="mb-5 grid gap-2 sm:grid-cols-2 xl:grid-cols-6">
           {propertySections.map((section) => (
             <button
               className={`flex items-center justify-center gap-2 border px-3 py-2.5 text-sm ${
@@ -3730,6 +3929,22 @@ function PropertiesView({
               </div>
             </div>
           </div>
+        )}
+
+        {propertyTab === "feedback" && (
+          <PropertyKnowledgeSection
+            key={`feedback-${selectedProperty.slug}`}
+            property={selectedProperty.slug}
+            section="feedback"
+          />
+        )}
+
+        {propertyTab === "research" && (
+          <PropertyKnowledgeSection
+            key={`research-${selectedProperty.slug}`}
+            property={selectedProperty.slug}
+            section="research"
+          />
         )}
 
         {propertyTab === "content" && (
@@ -4020,6 +4235,473 @@ function PropertiesView({
       </Panel>
     </div>
   );
+}
+
+interface KnowledgeFeedbackEntry {
+  id: string;
+  entryType: "feedback" | "edit" | "rule";
+  instruction: string;
+  rationale: string | null;
+  sourceCommentId: string | null;
+  sourceContentItemId: string | null;
+  createdByEmail: string | null;
+  createdAt: string;
+}
+
+interface KnowledgeResearchEntry {
+  id: string;
+  title: string;
+  body: string;
+  sourceUrl: string | null;
+  originalFilename: string | null;
+  status: "active" | "sunset";
+  expiresAt: string;
+  sunsetAt: string | null;
+  sunsetReason: string | null;
+  createdByEmail: string | null;
+  createdAt: string;
+}
+
+function PropertyKnowledgeSection({
+  property,
+  section,
+}: {
+  property: PropertySlug;
+  section: "feedback" | "research";
+}) {
+  const [feedback, setFeedback] = useState<KnowledgeFeedbackEntry[]>([]);
+  const [research, setResearch] = useState<KnowledgeResearchEntry[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [message, setMessage] = useState("");
+  const [feedbackForm, setFeedbackForm] = useState({
+    entryType: "rule" as KnowledgeFeedbackEntry["entryType"],
+    instruction: "",
+    rationale: "",
+    sourceContentItemId: "",
+    sourceCommentId: "",
+  });
+  const [researchForm, setResearchForm] = useState({
+    title: "",
+    body: "",
+    sourceUrl: "",
+    expiresInDays: 90,
+  });
+
+  async function loadKnowledge() {
+    setLoading(true);
+    setMessage("");
+    try {
+      const response = await fetch(
+        `/api/workspace/properties/${encodeURIComponent(property)}/knowledge`,
+      );
+      const payload = await response.json() as {
+        data?: {
+          feedback?: KnowledgeFeedbackEntry[];
+          research?: KnowledgeResearchEntry[];
+        };
+        message?: string;
+      };
+      if (!response.ok) throw new Error(payload.message || "Could not load property knowledge");
+      setFeedback(payload.data?.feedback ?? []);
+      setResearch(payload.data?.research ?? []);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Could not load property knowledge");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    let active = true;
+    void fetch(`/api/workspace/properties/${encodeURIComponent(property)}/knowledge`)
+      .then(async (response) => {
+        const payload = await response.json() as {
+          data?: {
+            feedback?: KnowledgeFeedbackEntry[];
+            research?: KnowledgeResearchEntry[];
+          };
+          message?: string;
+        };
+        if (!response.ok) throw new Error(payload.message || "Could not load property knowledge");
+        if (active) {
+          setFeedback(payload.data?.feedback ?? []);
+          setResearch(payload.data?.research ?? []);
+        }
+      })
+      .catch((error) => {
+        if (active) {
+          setMessage(error instanceof Error ? error.message : "Could not load property knowledge");
+        }
+      })
+      .finally(() => {
+        if (active) setLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [property]);
+
+  async function saveFeedback(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setSaving(true);
+    setMessage("");
+    try {
+      const response = await fetch(
+        `/api/workspace/properties/${encodeURIComponent(property)}/knowledge`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            section: "feedback",
+            entryType: feedbackForm.entryType,
+            instruction: feedbackForm.instruction,
+            rationale: feedbackForm.rationale,
+            sourceContentItemId: feedbackForm.sourceContentItemId || undefined,
+            sourceCommentId: feedbackForm.sourceCommentId || undefined,
+          }),
+        },
+      );
+      const payload = await response.json() as { message?: string };
+      if (!response.ok) throw new Error(payload.message || "Could not save feedback");
+      setFeedbackForm({
+        entryType: "rule",
+        instruction: "",
+        rationale: "",
+        sourceContentItemId: "",
+        sourceCommentId: "",
+      });
+      setMessage("Saved. This will be checked during every new generation.");
+      await loadKnowledge();
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Could not save feedback");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function saveResearch(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setSaving(true);
+    setMessage("");
+    try {
+      await createResearchEntry(researchForm);
+      setResearchForm({ title: "", body: "", sourceUrl: "", expiresInDays: 90 });
+      setMessage("Research saved and available to future content generation.");
+      await loadKnowledge();
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Could not save research");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function createResearchEntry(input: {
+    title: string;
+    body: string;
+    sourceUrl?: string;
+    originalFilename?: string;
+    expiresInDays: number;
+  }) {
+    const response = await fetch(
+      `/api/workspace/properties/${encodeURIComponent(property)}/knowledge`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ section: "research", ...input }),
+      },
+    );
+    const payload = await response.json() as { message?: string };
+    if (!response.ok) throw new Error(payload.message || "Could not save research");
+  }
+
+  async function uploadResearchFiles(fileList: FileList | null) {
+    const files = Array.from(fileList ?? []);
+    if (!files.length) return;
+    setSaving(true);
+    setMessage("");
+    try {
+      for (const file of files) {
+        if (!file.name.toLowerCase().endsWith(".md")) {
+          throw new Error(`${file.name} is not a Markdown file.`);
+        }
+        const body = await file.text();
+        if (!body.trim()) throw new Error(`${file.name} is empty.`);
+        if (body.length > 100_000) throw new Error(`${file.name} exceeds the 100,000 character limit.`);
+        await createResearchEntry({
+          title: file.name.replace(/\.md$/i, ""),
+          body,
+          originalFilename: file.name,
+          expiresInDays: researchForm.expiresInDays,
+        });
+      }
+      setMessage(`${files.length} research ${files.length === 1 ? "file" : "files"} added for K2.`);
+      await loadKnowledge();
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Could not upload research");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  if (section === "feedback") {
+    return (
+      <div className="space-y-5">
+        <div className="border border-[var(--border-soft)] bg-[var(--surface-subtle)] p-4">
+          <p className="font-medium text-[var(--text-primary)]">Permanent generation memory</p>
+          <p className="mt-1 text-sm leading-relaxed text-[var(--text-secondary)]">
+            Record what changed and why. Every active entry is added to the property context
+            before OpenAI writes and Anthropic reviews a new draft.
+          </p>
+        </div>
+
+        <form className="space-y-4 border border-[var(--border-hairline)] p-4" onSubmit={saveFeedback}>
+          <div className="grid gap-4 md:grid-cols-2">
+            <Field label="Entry type">
+              <select
+                className={fieldClass}
+                onChange={(event) =>
+                  setFeedbackForm({
+                    ...feedbackForm,
+                    entryType: event.target.value as KnowledgeFeedbackEntry["entryType"],
+                  })
+                }
+                value={feedbackForm.entryType}
+              >
+                <option value="rule">Rule</option>
+                <option value="feedback">Feedback</option>
+                <option value="edit">Edit made</option>
+              </select>
+            </Field>
+            <Field label="Why was this added?">
+              <input
+                className={fieldClass}
+                onChange={(event) =>
+                  setFeedbackForm({ ...feedbackForm, rationale: event.target.value })
+                }
+                placeholder="Explain the reasoning or desired outcome"
+                value={feedbackForm.rationale}
+              />
+            </Field>
+          </div>
+          <Field label="Feedback or rule">
+            <textarea
+              className={`${fieldClass} min-h-28`}
+              onChange={(event) =>
+                setFeedbackForm({ ...feedbackForm, instruction: event.target.value })
+              }
+              placeholder="Example: Open with a concrete operating moment before explaining the broader pattern."
+              required
+              value={feedbackForm.instruction}
+            />
+          </Field>
+          <details className="border border-[var(--border-hairline)] p-3">
+            <summary className="cursor-pointer text-sm text-[var(--text-secondary)]">
+              Link this to a review comment
+            </summary>
+            <div className="mt-3 grid gap-3 md:grid-cols-2">
+              <Field label="Content ID">
+                <input
+                  className={fieldClass}
+                  onChange={(event) =>
+                    setFeedbackForm({ ...feedbackForm, sourceContentItemId: event.target.value })
+                  }
+                  placeholder="UUID of the reviewed content"
+                  value={feedbackForm.sourceContentItemId}
+                />
+              </Field>
+              <Field label="Comment ID">
+                <input
+                  className={fieldClass}
+                  onChange={(event) =>
+                    setFeedbackForm({ ...feedbackForm, sourceCommentId: event.target.value })
+                  }
+                  placeholder="UUID of the source comment"
+                  value={feedbackForm.sourceCommentId}
+                />
+              </Field>
+            </div>
+          </details>
+          <button
+            className="bg-[var(--surface-ink)] px-4 py-2.5 text-sm text-[var(--text-on-dark)] disabled:opacity-50"
+            disabled={saving || !feedbackForm.instruction.trim()}
+            type="submit"
+          >
+            {saving ? "Saving…" : "Add to Feedback + Rules"}
+          </button>
+        </form>
+
+        <KnowledgeMessage loading={loading} message={message} />
+        <div className="space-y-3">
+          {feedback.map((entry) => (
+            <article className="border border-[var(--border-hairline)] bg-[var(--surface-card)] p-4" key={entry.id}>
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <Badge tone={entry.entryType === "rule" ? "green" : "gray"}>
+                  {entry.entryType.replaceAll("_", " ")}
+                </Badge>
+                <span className="text-xs text-[var(--text-muted)]">
+                  {entry.createdByEmail || "Unknown"} · {formatDateTime(entry.createdAt)}
+                </span>
+              </div>
+              <p className="mt-3 text-sm font-medium text-[var(--text-primary)]">{entry.instruction}</p>
+              {entry.rationale && (
+                <p className="mt-2 text-sm text-[var(--text-secondary)]">
+                  <strong>Why:</strong> {entry.rationale}
+                </p>
+              )}
+              {entry.sourceCommentId && (
+                <p className="mt-2 font-mono text-xs text-[var(--text-muted)]">
+                  From comment {entry.sourceCommentId}
+                </p>
+              )}
+            </article>
+          ))}
+          {!loading && feedback.length === 0 && (
+            <EmptyState icon={<MessageSquare size={20} />} label="No feedback or rules yet" />
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-5">
+      <div className="border border-[var(--border-soft)] bg-[var(--surface-subtle)] p-4">
+        <p className="font-medium text-[var(--text-primary)]">K2 research inbox</p>
+        <p className="mt-1 text-sm leading-relaxed text-[var(--text-secondary)]">
+          K2 can upload Markdown research for this property. Active topics are checked during
+          generation, then sunset after matching content is created or the shelf life expires.
+        </p>
+      </div>
+      <form className="space-y-4 border border-[var(--border-hairline)] p-4" onSubmit={saveResearch}>
+        <div className="flex flex-col gap-3 border border-[var(--border-hairline)] bg-[var(--surface-subtle)] p-4 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <p className="text-sm font-medium text-[var(--text-primary)]">Upload K2 Markdown</p>
+            <p className="mt-1 text-xs text-[var(--text-muted)]">
+              Each .md file becomes a separate, traceable research topic.
+            </p>
+          </div>
+          <label className="inline-flex cursor-pointer items-center justify-center gap-2 border border-[var(--clay-500)] px-3 py-2 text-sm text-[var(--clay-600)]">
+            <Upload size={16} />
+            Upload .md
+            <input
+              accept=".md,text/markdown"
+              className="hidden"
+              multiple
+              onChange={(event) => {
+                void uploadResearchFiles(event.target.files);
+                event.target.value = "";
+              }}
+              type="file"
+            />
+          </label>
+        </div>
+        <Field label="Research title">
+          <input
+            className={fieldClass}
+            onChange={(event) => setResearchForm({ ...researchForm, title: event.target.value })}
+            required
+            value={researchForm.title}
+          />
+        </Field>
+        <Field label="Research">
+          <textarea
+            className={`${fieldClass} min-h-48`}
+            onChange={(event) => setResearchForm({ ...researchForm, body: event.target.value })}
+            placeholder="Paste findings, notes, quotes, statistics, or source summaries."
+            required
+            value={researchForm.body}
+          />
+        </Field>
+        <div className="grid gap-4 md:grid-cols-2">
+          <Field label="Source URL">
+            <input
+              className={fieldClass}
+              onChange={(event) => setResearchForm({ ...researchForm, sourceUrl: event.target.value })}
+              placeholder="https://…"
+              type="url"
+              value={researchForm.sourceUrl}
+            />
+          </Field>
+          <Field label="Active shelf life">
+            <select
+              className={fieldClass}
+              onChange={(event) =>
+                setResearchForm({ ...researchForm, expiresInDays: Number(event.target.value) })
+              }
+              value={researchForm.expiresInDays}
+            >
+              <option value={30}>30 days</option>
+              <option value={60}>60 days</option>
+              <option value={90}>90 days</option>
+              <option value={180}>180 days</option>
+              <option value={365}>1 year</option>
+            </select>
+          </Field>
+        </div>
+        <button
+          className="bg-[var(--surface-ink)] px-4 py-2.5 text-sm text-[var(--text-on-dark)] disabled:opacity-50"
+          disabled={saving || !researchForm.title.trim() || !researchForm.body.trim()}
+          type="submit"
+        >
+          {saving ? "Saving…" : "Add research"}
+        </button>
+      </form>
+
+      <KnowledgeMessage loading={loading} message={message} />
+      <div className="space-y-3">
+        {research.map((entry) => (
+          <article className="border border-[var(--border-hairline)] bg-[var(--surface-card)] p-4" key={entry.id}>
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <h3 className="font-medium text-[var(--text-primary)]">{entry.title}</h3>
+                  <Badge tone={entry.status === "active" ? "green" : "gray"}>
+                    {entry.status}
+                  </Badge>
+                </div>
+                <p className="mt-1 text-xs text-[var(--text-muted)]">
+                  {entry.status === "active"
+                    ? `Active until ${formatDateTime(entry.expiresAt)}`
+                    : entry.sunsetReason || "Sunset"}
+                </p>
+              </div>
+              <span className="text-xs text-[var(--text-muted)]">
+                {entry.createdByEmail || "Unknown"} · {formatDateTime(entry.createdAt)}
+              </span>
+            </div>
+            {entry.originalFilename && (
+              <p className="mt-2 font-mono text-xs text-[var(--text-muted)]">
+                {entry.originalFilename}
+              </p>
+            )}
+            <p className="mt-3 whitespace-pre-wrap text-sm leading-relaxed text-[var(--text-secondary)]">
+              {entry.body}
+            </p>
+            {entry.sourceUrl && (
+              <a
+                className="mt-3 inline-block text-sm text-[var(--clay-600)] underline underline-offset-4"
+                href={entry.sourceUrl}
+                rel="noreferrer"
+                target="_blank"
+              >
+                Open source
+              </a>
+            )}
+          </article>
+        ))}
+        {!loading && research.length === 0 && (
+          <EmptyState icon={<BookOpen size={20} />} label="No research added yet" />
+        )}
+      </div>
+    </div>
+  );
+}
+
+function KnowledgeMessage({ loading, message }: { loading: boolean; message: string }) {
+  if (loading) return <p className="text-sm text-[var(--text-muted)]">Loading…</p>;
+  if (!message) return null;
+  return <p className="text-sm text-[var(--text-secondary)]">{message}</p>;
 }
 
 function PerformanceView({
@@ -4693,13 +5375,19 @@ function SettingsView({
 }
 
 function ContentTable({
+  canManagePublication = false,
   content,
   onPublish,
+  onRepublish,
   onSelect,
+  onUnpublish,
 }: {
+  canManagePublication?: boolean;
   content: ContentItem[];
   onPublish: (id: string) => void;
+  onRepublish?: (id: string) => void;
   onSelect: (id: string) => void;
+  onUnpublish?: (id: string) => void;
 }) {
   return (
     <div className="overflow-x-auto">
@@ -4751,6 +5439,24 @@ function ContentTable({
                   >
                     <Play size={14} />
                     Publish
+                  </button>
+                ) : canManagePublication && item.serverBacked && item.status === "published" ? (
+                  <button
+                    className="inline-flex items-center gap-1 text-[var(--clay-600)] hover:text-[var(--ink-700)]"
+                    onClick={() => onUnpublish?.(item.id)}
+                    type="button"
+                  >
+                    <Archive size={14} />
+                    Unpublish
+                  </button>
+                ) : canManagePublication && item.serverBacked && item.status === "unpublished" ? (
+                  <button
+                    className="inline-flex items-center gap-1 text-[var(--clay-600)] hover:text-[var(--ink-700)]"
+                    onClick={() => onRepublish?.(item.id)}
+                    type="button"
+                  >
+                    <RefreshCw size={14} />
+                    Republish
                   </button>
                 ) : (
                   <span className="text-white/35">-</span>
@@ -4827,6 +5533,26 @@ function ContentDetail({
         <MiniStat label="Context hash" value={item.contextHash ?? "Context recorded on next generation"} />
         <MiniStat label="OG title" value={item.socialMeta?.ogTitle ?? item.metaTitle} />
       </div>
+      {(item.status === "unpublished" || item.unpublishedAt) && (
+        <div className="grid gap-3 border border-[var(--border-soft)] bg-[var(--surface-sunken)] p-4 md:grid-cols-2">
+          <MiniStat
+            label="Unpublished"
+            value={item.unpublishedAt ? formatDateTime(item.unpublishedAt) : "Not recorded"}
+          />
+          <MiniStat
+            label="Reason"
+            value={item.unpublishReason || "No reason supplied"}
+          />
+          <MiniStat
+            label="Website sync"
+            value={item.publicationSyncStatus ?? "Not recorded"}
+          />
+          <MiniStat
+            label="Sync detail"
+            value={item.publicationSyncError || "No synchronization error"}
+          />
+        </div>
+      )}
       {(item.servedModels ?? []).length > 0 && (
         <div className="border border-white/10 bg-[#0d0f12] p-4">
           <p className="font-mono text-xs uppercase text-white/45">Model calls</p>
@@ -5256,6 +5982,8 @@ function StatusBadge({ status }: { status: ContentStatus }) {
   const tone =
     status === "published"
       ? "green"
+      : status === "unpublished"
+        ? "amber"
       : status === "scheduled"
         ? "cyan"
         : status === "approved"
@@ -5406,6 +6134,7 @@ function workspaceRecordToContentItem(record: WorkspaceContentRecord): ContentIt
     approved: "approved",
     scheduled: "scheduled",
     published: "published",
+    unpublished: "unpublished",
     failed: "failed",
   };
   return {
@@ -5421,6 +6150,13 @@ function workspaceRecordToContentItem(record: WorkspaceContentRecord): ContentIt
     qualityScore: record.qualityScore,
     publishAt: record.publishAt ?? "",
     publishedAt: record.publishedAt ?? "",
+    publishedUrl: record.publishedUrl ?? undefined,
+    unpublishedAt: record.unpublishedAt ?? undefined,
+    unpublishedBy: record.unpublishedBy ?? undefined,
+    unpublishReason: record.unpublishReason ?? undefined,
+    publicationSyncStatus: record.publicationSyncStatus ?? undefined,
+    publicationSyncError: record.publicationSyncError ?? undefined,
+    publicationSyncUpdatedAt: record.publicationSyncUpdatedAt ?? undefined,
     createdAt: record.createdAt,
     excerpt: version.excerpt ?? "",
     metaTitle: version.meta_title ?? version.title.slice(0, 60),
@@ -6626,6 +7362,7 @@ function statusLabel(status: ContentStatus) {
     approved: "Approved",
     scheduled: "Scheduled",
     published: "Published",
+    unpublished: "Unpublished",
     rejected: "Rejected",
     failed: "Failed",
   };

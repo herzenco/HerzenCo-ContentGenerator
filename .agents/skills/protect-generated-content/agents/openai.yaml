@@ -1,0 +1,4 @@
+interface:
+  display_name: "Protect Generated Content"
+  short_description: "Fail-closed safeguards for saved content"
+  default_prompt: "Use $protect-generated-content to verify that this change and push cannot destroy, overwrite, or expose saved content."

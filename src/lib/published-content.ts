@@ -28,6 +28,7 @@ export async function listPublishedContent(propertySlug: string, slug?: string) 
     .from("published_content_feed")
     .select("*")
     .eq("property_slug", propertySlug)
+    .eq("visible", true)
     .order("published_at", { ascending: false });
 
   if (slug) query = query.eq("slug", slug);

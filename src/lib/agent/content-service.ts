@@ -5,6 +5,10 @@ import { getProvider } from "@/lib/ai/providers";
 import type { AgentPrincipal } from "@/lib/agent/auth";
 import { recordContentAudit, type ContentAuditChange } from "@/lib/content-audit";
 import { triggerWebsiteBuild } from "@/lib/published-content";
+import {
+  recordResearchUsage,
+  sunsetExpiredResearchForPropertyId,
+} from "@/lib/property-knowledge";
 import { createSupabaseAdminClient } from "@/utils/supabase/admin";
 
 type ContentType = "article" | "newsletter" | "social_post";
@@ -64,6 +68,12 @@ interface AgentContentRecord {
   publishAt: string | null;
   publishedAt: string | null;
   publishedUrl: string | null;
+  unpublishedAt: string | null;
+  unpublishedBy: string | null;
+  unpublishReason: string | null;
+  publicationSyncStatus: "pending" | "synced" | "failed" | null;
+  publicationSyncError: string | null;
+  publicationSyncUpdatedAt: string | null;
   createdAt: string;
   updatedAt: string;
   title: string | null;
@@ -93,7 +103,7 @@ export async function listAgentContent(options: {
   let query = admin
     .from("content_items")
     .select(
-      "id, type, status, quality_score, publish_at, published_at, published_url, created_at, updated_at, properties!inner(slug), content_versions(title, excerpt, version, created_at)",
+      "id, type, status, quality_score, publish_at, published_at, published_url, unpublished_at, unpublished_by, unpublish_reason, publication_sync_status, publication_sync_error, publication_sync_updated_at, created_at, updated_at, properties!inner(slug), content_versions(title, excerpt, version, created_at)",
     )
     .order("created_at", { ascending: false })
     .limit(Math.min(Math.max(options.limit ?? 20, 1), 100));
@@ -109,7 +119,7 @@ export async function getAgentContent(id: string) {
   const { data, error } = await admin
     .from("content_items")
     .select(
-      "id, type, status, quality_score, publish_at, published_at, published_url, created_at, updated_at, properties!inner(slug), content_versions(*, eval_results(*))",
+      "id, type, status, quality_score, publish_at, published_at, published_url, unpublished_at, unpublished_by, unpublish_reason, publication_sync_status, publication_sync_error, publication_sync_updated_at, created_at, updated_at, properties!inner(slug), content_versions(*, eval_results(*))",
     )
     .eq("id", id)
     .maybeSingle();
@@ -171,7 +181,7 @@ export async function listWorkspaceContent(limit = 100) {
   const { data, error } = await admin
     .from("content_items")
     .select(
-      "id, type, status, quality_score, publish_at, published_at, published_url, created_at, updated_at, properties!inner(slug), content_versions(*, eval_results(*))",
+      "id, type, status, quality_score, publish_at, published_at, published_url, unpublished_at, unpublished_by, unpublish_reason, publication_sync_status, publication_sync_error, publication_sync_updated_at, created_at, updated_at, properties!inner(slug), content_versions(*, eval_results(*))",
     )
     .order("created_at", { ascending: false })
     .limit(Math.min(Math.max(limit, 1), 100));
@@ -181,6 +191,9 @@ export async function listWorkspaceContent(limit = 100) {
 
 export async function publishWorkspaceContent(id: string, actorUserId: string | null) {
   const content = await getAgentContent(id);
+  if (content.status === "unpublished") {
+    throw new Error("use_republish_endpoint_for_unpublished_content");
+  }
   const latest = content.latestVersion;
   if (!latest?.body_mdx) throw new Error("content_version_missing");
   const admin = createSupabaseAdminClient();
@@ -377,7 +390,15 @@ export async function generateAgentDraft(
         { field: "status", before: null, after: "needs_review" },
       ],
     });
-    return getAgentContent(item.id);
+    const researchWarning = await recordResearchUsageSafely({
+      research: context.research,
+      contentItemId: item.id,
+      generatedTitle: title,
+      generatedBody: body,
+      request: input.prompt,
+    });
+    const saved = await getAgentContent(item.id);
+    return researchWarning ? { ...saved, warnings: [researchWarning] } : saved;
   } catch (error) {
     await auditAgent(principal, "content.generate", "content_item", item.id, {
       property: input.property,
@@ -393,11 +414,32 @@ export async function generateAgentDraft(
         { field: "status", before: null, after: "needs_review" },
       ],
     });
+    const researchWarning = await recordResearchUsageSafely({
+      research: context.research,
+      contentItemId: item.id,
+      generatedTitle: title,
+      generatedBody: body,
+      request: input.prompt,
+    });
     return {
       ...(await getAgentContent(item.id)),
       qaStatus: "pending",
-      warnings: ["Draft saved, but Anthropic QA did not complete. Run run_qa before approval."],
+      warnings: [
+        "Draft saved, but Anthropic QA did not complete. Run run_qa before approval.",
+        ...(researchWarning ? [researchWarning] : []),
+      ],
     };
+  }
+}
+
+async function recordResearchUsageSafely(
+  input: Parameters<typeof recordResearchUsage>[0],
+) {
+  try {
+    await recordResearchUsage(input);
+    return "";
+  } catch (error) {
+    return `Draft saved, but research lifecycle tracking needs attention: ${safeProviderError(error)}`;
   }
 }
 
@@ -407,6 +449,7 @@ export async function reviseAgentDraft(
 ) {
   const current = await getAgentContent(input.id);
   if (current.status === "published") throw new Error("published_content_cannot_be_revised_in_place");
+  if (current.status === "unpublished") throw new Error("unpublished_content_cannot_be_revised_in_place");
   const latest = current.latestVersion;
   if (!latest) throw new Error("content_version_missing");
 
@@ -523,6 +566,38 @@ export async function reviseAgentDraftFromComments(
     })
     .in("id", commentIds);
   if (error) throw new Error(error.message);
+  const { data: property, error: propertyError } = await admin
+    .from("properties")
+    .select("id")
+    .eq("slug", revised.property)
+    .single();
+  if (propertyError) throw new Error(propertyError.message);
+  const { data: existingRules, error: existingRulesError } = await admin
+    .from("property_feedback_rules")
+    .select("source_comment_id")
+    .in("source_comment_id", commentIds);
+  if (existingRulesError) throw new Error(existingRulesError.message);
+  const recordedCommentIds = new Set(
+    (existingRules ?? []).map((entry) => entry.source_comment_id).filter(Boolean),
+  );
+  const newRules = comments
+    .filter((comment) => !recordedCommentIds.has(comment.id))
+    .map((comment) => ({
+      property_id: property.id,
+      entry_type: "edit",
+      instruction: comment.body,
+      rationale: `Applied to content version ${revised.version} from a reviewer comment${comment.anchor_text ? ` on “${String(comment.anchor_text).slice(0, 240)}”` : ""}.`,
+      source_comment_id: comment.id,
+      source_content_item_id: id,
+      created_by: principal.actorUserId,
+      created_by_email: comment.author_email || null,
+    }));
+  if (newRules.length > 0) {
+    const { error: rulesError } = await admin
+      .from("property_feedback_rules")
+      .insert(newRules);
+    if (rulesError) throw new Error(rulesError.message);
+  }
   await auditAgent(principal, "content.revise_from_comments", "content_item", id, {
     commentIds,
     version: revised.version,
@@ -545,7 +620,7 @@ export async function submitAgentDraftForReview(id: string, principal: AgentPrin
     .from("content_items")
     .update({ status: "needs_review" })
     .eq("id", id)
-    .neq("status", "published")
+    .not("status", "in", '("published","unpublished")')
     .select("id")
     .maybeSingle();
   if (error) throw new Error(error.message);
@@ -559,12 +634,13 @@ export async function submitAgentDraftForReview(id: string, principal: AgentPrin
 export async function rejectAgentContent(id: string, principal: AgentPrincipal) {
   const current = await getAgentContent(id);
   if (current.status === "published") throw new Error("published_content_cannot_be_rejected");
+  if (current.status === "unpublished") throw new Error("unpublished_content_cannot_be_rejected");
   const admin = createSupabaseAdminClient();
   const { data, error } = await admin
     .from("content_items")
     .update({ status: "rejected" })
     .eq("id", id)
-    .neq("status", "published")
+    .not("status", "in", '("published","unpublished")')
     .select("id")
     .maybeSingle();
   if (error) throw new Error(error.message);
@@ -645,17 +721,65 @@ async function loadPropertyContext(slug: string) {
   const docs = Array.isArray(property.brand_context_docs)
     ? [...property.brand_context_docs].sort((a, b) => a.sort_order - b.sort_order)
     : [];
+  await sunsetExpiredResearchForPropertyId(property.id);
+  const [feedbackResult, researchResult] = await Promise.all([
+    admin
+      .from("property_feedback_rules")
+      .select("id, entry_type, instruction, rationale, source_comment_id, supersedes_id, created_at")
+      .eq("property_id", property.id)
+      .order("created_at", { ascending: true }),
+    admin
+      .from("property_research_entries")
+      .select("id, title, body, source_url, supersedes_id, created_at")
+      .eq("property_id", property.id)
+      .eq("status", "active")
+      .gt("expires_at", new Date().toISOString())
+      .order("created_at", { ascending: true }),
+  ]);
+  if (feedbackResult.error) throw new Error(feedbackResult.error.message);
+  if (researchResult.error) throw new Error(researchResult.error.message);
+  const supersededFeedback = new Set(
+    (feedbackResult.data ?? []).map((entry) => entry.supersedes_id).filter(Boolean),
+  );
+  const supersededResearch = new Set(
+    (researchResult.data ?? []).map((entry) => entry.supersedes_id).filter(Boolean),
+  );
+  const feedback = (feedbackResult.data ?? []).filter((entry) => !supersededFeedback.has(entry.id));
+  const research = (researchResult.data ?? []).filter((entry) => !supersededResearch.has(entry.id));
   const context = [
     profile ? `VOICE:\n${profile.voice_description}\n\nAUDIENCE:\n${profile.audience}` : "",
     profile ? `PILLARS:\n${JSON.stringify(profile.content_pillars)}\n\nBANNED:\n${JSON.stringify(profile.banned_topics_claims)}` : "",
     profile?.style_examples?.length ? `STYLE EXAMPLES:\n${profile.style_examples.join("\n---\n")}` : "",
     ...docs.map((doc) => `# ${doc.title}\n${doc.content_md}`),
+    feedback.length
+      ? `FEEDBACK + RULES — CHECK EVERY ITEM BEFORE WRITING:\n${feedback
+          .map((entry, index) => [
+            `${index + 1}. [${entry.entry_type.toUpperCase()}] ${entry.instruction}`,
+            entry.rationale ? `Why: ${entry.rationale}` : "",
+            entry.source_comment_id ? `Origin: review comment ${entry.source_comment_id}` : "",
+          ].filter(Boolean).join("\n"))
+          .join("\n\n")}`
+      : "",
+    research.length
+      ? `RESEARCH — USE WHEN RELEVANT; DO NOT INVENT BEYOND THE SOURCE:\n${research
+          .map((entry) => [
+            `# ${entry.title}`,
+            entry.body,
+            entry.source_url ? `Source: ${entry.source_url}` : "",
+          ].filter(Boolean).join("\n"))
+          .join("\n\n---\n\n")}`
+      : "",
   ].filter(Boolean).join("\n\n---\n\n");
   return {
     id: property.id,
     slug: property.slug,
     language: property.language === "es" ? "Spanish" : "English",
     context,
+    research: research.map((entry) => ({
+      id: entry.id,
+      title: entry.title,
+      body: entry.body,
+    })),
     hash: `ctx_${createHash("sha256").update(context).digest("hex").slice(0, 16)}`,
   };
 }
@@ -875,6 +999,23 @@ function normalizeContentRecord(record: Record<string, unknown>, includeBody = f
     publishAt: typeof record.publish_at === "string" ? record.publish_at : null,
     publishedAt: typeof record.published_at === "string" ? record.published_at : null,
     publishedUrl: typeof record.published_url === "string" ? record.published_url : null,
+    unpublishedAt: typeof record.unpublished_at === "string" ? record.unpublished_at : null,
+    unpublishedBy: typeof record.unpublished_by === "string" ? record.unpublished_by : null,
+    unpublishReason: typeof record.unpublish_reason === "string" ? record.unpublish_reason : null,
+    publicationSyncStatus:
+      record.publication_sync_status === "pending" ||
+      record.publication_sync_status === "synced" ||
+      record.publication_sync_status === "failed"
+        ? record.publication_sync_status
+        : null,
+    publicationSyncError:
+      typeof record.publication_sync_error === "string"
+        ? record.publication_sync_error
+        : null,
+    publicationSyncUpdatedAt:
+      typeof record.publication_sync_updated_at === "string"
+        ? record.publication_sync_updated_at
+        : null,
     createdAt: String(record.created_at ?? ""),
     updatedAt: String(record.updated_at ?? ""),
     title: latest?.title ?? null,

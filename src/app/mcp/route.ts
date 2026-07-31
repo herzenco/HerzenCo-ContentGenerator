@@ -15,6 +15,11 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
 import { z } from "zod/v4";
 import { listContentAudit } from "@/lib/content-audit";
+import {
+  addAgentPropertyFeedbackRule,
+  addAgentPropertyResearch,
+  listPropertyKnowledge,
+} from "@/lib/property-knowledge";
 
 export const runtime = "nodejs";
 
@@ -37,6 +42,92 @@ export async function POST(request: Request) {
       annotations: { readOnlyHint: true },
     },
     async () => toolResult(await listAgentProperties()),
+  );
+  server.registerTool(
+    "list_property_knowledge",
+    {
+      title: "List property feedback and research",
+      description: "List the permanent Feedback + Rules memory and research inbox for one property, including active and sunset research.",
+      inputSchema: z.object({ property: z.string().min(1) }),
+      annotations: { readOnlyHint: true },
+    },
+    async ({ property }) => toolResult(await listPropertyKnowledge(property)),
+  );
+  server.registerTool(
+    "list_feedback_rules",
+    {
+      title: "Review property feedback and rules",
+      description: "Review the complete append-only Feedback + Rules memory for a property before generating or revising content. Entries include their author, rationale, source comment, and source content item.",
+      inputSchema: z.object({ property: z.string().min(1) }),
+      annotations: { readOnlyHint: true },
+    },
+    async ({ property }) => {
+      const knowledge = await listPropertyKnowledge(property);
+      return toolResult({ property, feedback: knowledge.feedback });
+    },
+  );
+  server.registerTool(
+    "add_feedback_rule",
+    {
+      title: "Add property feedback or rule",
+      description: "Append a new rule, feedback item, or edit lesson to a property's permanent generation memory. Use this for C-3PO rules. Existing entries are never overwritten.",
+      inputSchema: z.object({
+        property: z.string().min(1),
+        entryType: z.enum(["feedback", "edit", "rule"]).default("rule"),
+        instruction: z.string().min(1).max(10_000),
+        rationale: z.string().min(1).max(10_000),
+        sourceCommentId: z.string().uuid().optional(),
+        sourceContentItemId: z.string().uuid().optional(),
+      }),
+      annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false },
+    },
+    async ({
+      property,
+      entryType,
+      instruction,
+      rationale,
+      sourceCommentId,
+      sourceContentItemId,
+    }) => {
+      requireScope(principal.scopes, "content:write");
+      return toolResult(await addAgentPropertyFeedbackRule({
+        slug: property,
+        entryType,
+        instruction,
+        rationale,
+        sourceCommentId,
+        sourceContentItemId,
+        actorUserId: principal.actorUserId,
+      }));
+    },
+  );
+  server.registerTool(
+    "add_research",
+    {
+      title: "Add property research",
+      description: "Add a Markdown research document to a property's active research inbox. Use this for K2 research handoffs. The source is retained and automatically considered during future generation.",
+      inputSchema: z.object({
+        property: z.string().min(1),
+        title: z.string().min(1).max(240),
+        markdown: z.string().min(1).max(100_000),
+        originalFilename: z.string().max(255).optional(),
+        sourceUrl: z.string().url().max(2_000).optional(),
+        expiresInDays: z.number().int().min(7).max(365).default(90),
+      }),
+      annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false },
+    },
+    async ({ property, title, markdown, originalFilename, sourceUrl, expiresInDays }) => {
+      requireScope(principal.scopes, "content:write");
+      return toolResult(await addAgentPropertyResearch({
+        slug: property,
+        title,
+        body: markdown,
+        originalFilename,
+        sourceUrl,
+        expiresInDays,
+        actorUserId: principal.actorUserId,
+      }));
+    },
   );
   server.registerTool(
     "list_content",

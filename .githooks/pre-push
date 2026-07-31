@@ -1,0 +1,8 @@
+#!/bin/sh
+set -eu
+
+repo_root=$(git rev-parse --show-toplevel)
+python3 -m unittest discover \
+  -s "$repo_root/.agents/skills/protect-generated-content/tests" \
+  -p "test_*.py"
+exec python3 "$repo_root/.agents/skills/protect-generated-content/scripts/pre_push_guard.py"
