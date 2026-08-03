@@ -83,6 +83,33 @@ interface AgentContentRecord {
   versions?: AgentContentVersion[];
 }
 
+const CONTENT_SELECT_BASE =
+  "id, type, status, quality_score, publish_at, published_at, published_url, created_at, updated_at, properties!inner(slug)";
+
+const REVERSIBLE_PUBLICATION_SELECT =
+  "unpublished_at, unpublished_by, unpublish_reason, publication_sync_status, publication_sync_error, publication_sync_updated_at";
+
+const CONTENT_LIST_VERSION_SELECT = "(title, excerpt, version, created_at)";
+const CONTENT_DETAIL_VERSION_SELECT = "(*, eval_results(*))";
+
+function buildContentSelect(versionSelect: string, includeReversiblePublicationFields = true) {
+  const fields = [
+    CONTENT_SELECT_BASE,
+    `content_versions${versionSelect}`,
+  ];
+
+  if (includeReversiblePublicationFields) {
+    fields.splice(1, 0, REVERSIBLE_PUBLICATION_SELECT);
+  }
+
+  return fields.join(", ");
+}
+
+function isMissingReversiblePublicationColumn(error: { message?: string } | null) {
+  return /column content_items\.(unpublished_at|unpublished_by|unpublish_reason|publication_sync_status|publication_sync_error|publication_sync_updated_at) does not exist/i
+    .test(error?.message ?? "");
+}
+
 export async function listAgentProperties() {
   const admin = createSupabaseAdminClient();
   const { data, error } = await admin
@@ -100,32 +127,44 @@ export async function listAgentContent(options: {
   limit?: number;
 }) {
   const admin = createSupabaseAdminClient();
-  let query = admin
-    .from("content_items")
-    .select(
-      "id, type, status, quality_score, publish_at, published_at, published_url, unpublished_at, unpublished_by, unpublish_reason, publication_sync_status, publication_sync_error, publication_sync_updated_at, created_at, updated_at, properties!inner(slug), content_versions(title, excerpt, version, created_at)",
-    )
-    .order("created_at", { ascending: false })
-    .limit(Math.min(Math.max(options.limit ?? 20, 1), 100));
-  if (options.property) query = query.eq("properties.slug", options.property);
-  if (options.status) query = query.eq("status", options.status);
-  const { data, error } = await query;
+  const limit = Math.min(Math.max(options.limit ?? 20, 1), 100);
+  const runQuery = (includeReversiblePublicationFields: boolean) => {
+    let query = admin
+      .from("content_items")
+      .select(buildContentSelect(CONTENT_LIST_VERSION_SELECT, includeReversiblePublicationFields))
+      .order("created_at", { ascending: false })
+      .limit(limit);
+    if (options.property) query = query.eq("properties.slug", options.property);
+    if (options.status) query = query.eq("status", options.status);
+    return query;
+  };
+
+  let { data, error } = await runQuery(true);
+  if (error && isMissingReversiblePublicationColumn(error)) {
+    ({ data, error } = await runQuery(false));
+  }
   if (error) throw new Error(error.message);
-  return (data ?? []).map((record) => normalizeContentRecord(record));
+  return (data ?? []).map((record) =>
+    normalizeContentRecord(record as unknown as Record<string, unknown>),
+  );
 }
 
 export async function getAgentContent(id: string) {
   const admin = createSupabaseAdminClient();
-  const { data, error } = await admin
-    .from("content_items")
-    .select(
-      "id, type, status, quality_score, publish_at, published_at, published_url, unpublished_at, unpublished_by, unpublish_reason, publication_sync_status, publication_sync_error, publication_sync_updated_at, created_at, updated_at, properties!inner(slug), content_versions(*, eval_results(*))",
-    )
-    .eq("id", id)
-    .maybeSingle();
+  const runQuery = (includeReversiblePublicationFields: boolean) =>
+    admin
+      .from("content_items")
+      .select(buildContentSelect(CONTENT_DETAIL_VERSION_SELECT, includeReversiblePublicationFields))
+      .eq("id", id)
+      .maybeSingle();
+
+  let { data, error } = await runQuery(true);
+  if (error && isMissingReversiblePublicationColumn(error)) {
+    ({ data, error } = await runQuery(false));
+  }
   if (error) throw new Error(error.message);
   if (!data) throw new Error("content_not_found");
-  return normalizeContentRecord(data, true);
+  return normalizeContentRecord(data as unknown as Record<string, unknown>, true);
 }
 
 export async function listContentReviewComments(id: string) {
@@ -178,15 +217,22 @@ export async function addContentReviewComment(
 
 export async function listWorkspaceContent(limit = 100) {
   const admin = createSupabaseAdminClient();
-  const { data, error } = await admin
-    .from("content_items")
-    .select(
-      "id, type, status, quality_score, publish_at, published_at, published_url, unpublished_at, unpublished_by, unpublish_reason, publication_sync_status, publication_sync_error, publication_sync_updated_at, created_at, updated_at, properties!inner(slug), content_versions(*, eval_results(*))",
-    )
-    .order("created_at", { ascending: false })
-    .limit(Math.min(Math.max(limit, 1), 100));
+  const cappedLimit = Math.min(Math.max(limit, 1), 100);
+  const runQuery = (includeReversiblePublicationFields: boolean) =>
+    admin
+      .from("content_items")
+      .select(buildContentSelect(CONTENT_DETAIL_VERSION_SELECT, includeReversiblePublicationFields))
+      .order("created_at", { ascending: false })
+      .limit(cappedLimit);
+
+  let { data, error } = await runQuery(true);
+  if (error && isMissingReversiblePublicationColumn(error)) {
+    ({ data, error } = await runQuery(false));
+  }
   if (error) throw new Error(error.message);
-  return (data ?? []).map((record) => normalizeContentRecord(record, true));
+  return (data ?? []).map((record) =>
+    normalizeContentRecord(record as unknown as Record<string, unknown>, true),
+  );
 }
 
 export async function publishWorkspaceContent(id: string, actorUserId: string | null) {
