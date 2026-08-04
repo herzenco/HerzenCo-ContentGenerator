@@ -71,7 +71,11 @@ export async function savePublishedContent(supabase: SupabaseClient, input: {
   publishedAt?: string;
   heroImageUrl?: string | null;
   heroImageAlt?: string | null;
-}, actor: { userId: string; email?: string | null }) {
+}, actor: {
+  userId?: string | null;
+  email?: string | null;
+  type?: "user" | "agent" | "system" | "website";
+}) {
   const { data: property, error: propertyError } = await supabase
     .from("properties")
     .select("id, slug, revalidate_url")
@@ -183,7 +187,11 @@ export async function savePublishedContent(supabase: SupabaseClient, input: {
   if (!contentItemId) throw new Error("content_item_missing_after_publish");
   await recordContentAudit({
     contentItemId,
-    actor: { userId: actor.userId, email: actor.email, type: "user" },
+    actor: {
+      userId: actor.userId,
+      email: actor.email,
+      type: actor.type ?? "user",
+    },
     action: existing ? "content.update_and_publish" : "content.create_and_publish",
     version,
     changes: [
