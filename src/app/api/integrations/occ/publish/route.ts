@@ -3,42 +3,31 @@ import {
   savePublishedContent,
   triggerWebsiteBuild,
 } from "@/lib/published-content";
+import { occPublicationPayloadSchema, validateOccPublicationPayload } from "@/lib/occ-publication-contract";
 import { createSupabaseAdminClient } from "@/utils/supabase/admin";
-import { z } from "zod";
 
 export const runtime = "nodejs";
-
-const payloadSchema = z.object({
-  content_item_id: z.string().uuid(),
-  title: z.string().trim().min(1).max(240),
-  body: z.string().trim().min(1).max(250_000),
-  meta_description: z.string().trim().min(1).max(300),
-  publish_at: z.string().datetime().nullable().optional(),
-  seo_score: z.number().int().min(0).max(100).nullable().optional(),
-  aeo_score: z.number().int().min(0).max(100).nullable().optional(),
-});
 
 export async function POST(request: Request) {
   if (!isAuthorized(request)) {
     return Response.json({ error: "unauthorized" }, { status: 401 });
   }
 
-  const parsed = payloadSchema.safeParse(await readJson(request));
+  const parsed = occPublicationPayloadSchema.safeParse(await readJson(request));
   if (!parsed.success) {
     return Response.json(
       { error: "invalid_request", issues: parsed.error.flatten().fieldErrors },
-      { status: 400 },
+      { status: 422 },
     );
   }
 
+  const input = parsed.data;
+  const requestIdempotencyKey = request.headers.get("idempotency-key")?.trim();
+  const validationErrors = validateOccPublicationPayload(input, requestIdempotencyKey);
+  if (validationErrors.length) return Response.json({ error: "validation_failed", validation_errors: validationErrors }, { status: 422 });
+
   try {
-    const input = parsed.data;
-    const qualityScores = [input.seo_score, input.aeo_score].filter(
-      (score): score is number => typeof score === "number",
-    );
-    const qualityScore = qualityScores.length
-      ? Math.min(...qualityScores)
-      : null;
+    const featuredImageUrl = input.featured_image?.url || null;
     const content = await savePublishedContent(
       createSupabaseAdminClient(),
       {
@@ -46,11 +35,24 @@ export async function POST(request: Request) {
         contentType: "article",
         title: input.title,
         body: input.body,
-        excerpt: input.meta_description.slice(0, 1_000),
-        metaTitle: input.title.slice(0, 120),
-        metaDescription: input.meta_description,
-        qualityScore,
-        publishedAt: input.publish_at || undefined,
+        excerpt: input.seo.description.slice(0, 1_000) || input.title,
+        metaTitle: input.seo.title,
+        metaDescription: input.seo.description,
+        publishedAt: input.publish_date || undefined,
+        heroImageUrl: featuredImageUrl,
+        heroImageAlt: input.featured_image?.alt_text || null,
+        slug: input.slug,
+        canonicalPath: input.canonical_path,
+        destination: input.destination,
+        keywords: input.seo.keywords,
+        media: input.media,
+        author: input.author,
+        tags: input.tags,
+        categories: input.categories,
+        externalSource: "occ",
+        externalSourceId: input.content_item_id,
+        contentHash: input.approved_content_hash,
+        sourceSnapshot: input,
       },
       {
         email: "occ-automation@herzenco.co",
@@ -64,16 +66,25 @@ export async function POST(request: Request) {
 
     return Response.json({
       id: content.id,
-      final_url: `https://herzenco.co/resources/${encodeURIComponent(content.slug)}/`,
+      final_url: content.publishedUrl,
+      publishing_status: "published",
+      validation_errors: [],
       published_at: content.publishedAt,
       source_content_item_id: input.content_item_id,
+      version: content.version,
+      created: content.created,
+      idempotent_replay: content.idempotentReplay,
     });
   } catch (error) {
     console.error("OCC website publication failed", error);
+    const message = error instanceof Error ? error.message : "Unknown error";
+    if (message.startsWith("validation:")) {
+      return Response.json({ error: "validation_failed", validation_errors: [message.slice("validation:".length).trim()] }, { status: 422 });
+    }
     return Response.json(
       {
         error: "publish_failed",
-        message: error instanceof Error ? error.message : "Unknown error",
+        message,
       },
       { status: 502 },
     );

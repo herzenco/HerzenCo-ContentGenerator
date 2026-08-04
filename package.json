@@ -8,6 +8,8 @@
     "start": "next start",
     "guard:content": "python3 .agents/skills/protect-generated-content/scripts/pre_push_guard.py",
     "guard:content:test": "python3 -m unittest discover -s .agents/skills/protect-generated-content/tests -p 'test_*.py'",
+    "test": "npm run test:occ-publication",
+    "test:occ-publication": "node --experimental-strip-types --test src/lib/occ-publication-contract.test.ts",
     "lint": "eslint",
     "typecheck": "tsc --noEmit"
   },

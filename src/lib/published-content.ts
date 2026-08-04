@@ -71,6 +71,18 @@ export async function savePublishedContent(supabase: SupabaseClient, input: {
   publishedAt?: string;
   heroImageUrl?: string | null;
   heroImageAlt?: string | null;
+  slug?: string;
+  canonicalPath?: string;
+  destination?: string;
+  keywords?: string[];
+  media?: unknown[];
+  author?: string | null;
+  tags?: string[];
+  categories?: string[];
+  externalSource?: string;
+  externalSourceId?: string;
+  contentHash?: string;
+  sourceSnapshot?: Record<string, unknown>;
 }, actor: {
   userId?: string | null;
   email?: string | null;
@@ -78,34 +90,66 @@ export async function savePublishedContent(supabase: SupabaseClient, input: {
 }) {
   const { data: property, error: propertyError } = await supabase
     .from("properties")
-    .select("id, slug, revalidate_url")
+    .select("id, slug, base_url, revalidate_url")
     .eq("slug", input.property)
     .eq("active", true)
     .maybeSingle();
   if (propertyError) throw propertyError;
   if (!property) throw new Error(`Unknown property: ${input.property}`);
 
-  const slug = slugify(input.title);
+  const slug = input.slug?.trim() || slugify(input.title);
   const publishedAt = input.publishedAt || new Date().toISOString();
-  const { data: existing, error: existingError } = await supabase
+  const canonicalPath = input.canonicalPath?.trim() || `/resources/${slug}/`;
+  const publishedUrl = new URL(canonicalPath, property.base_url || "https://herzenco.co").toString();
+  let existingQuery = supabase
     .from("content_items")
-    .select("id")
-    .eq("property_id", property.id)
-    .eq("slug", slug)
-    .maybeSingle();
+    .select("id,slug,status,published_at,published_url,approved_content_hash,external_source,external_source_id")
+    .eq("property_id", property.id);
+  existingQuery = input.externalSource && input.externalSourceId
+    ? existingQuery.eq("external_source", input.externalSource).eq("external_source_id", input.externalSourceId)
+    : existingQuery.eq("slug", slug);
+  const { data: foundExternalOrSlug, error: existingError } = await existingQuery.maybeSingle();
+  let foundExisting = foundExternalOrSlug;
+  let existing = foundExisting;
   if (existingError) throw existingError;
+  if (!existing && input.externalSource && input.externalSourceId) {
+    const slugMatch = await supabase.from("content_items").select("id,slug,status,published_at,published_url,approved_content_hash,external_source,external_source_id").eq("property_id", property.id).eq("slug", slug).maybeSingle();
+    if (slugMatch.error) throw slugMatch.error;
+    if (slugMatch.data?.external_source_id && (slugMatch.data.external_source !== input.externalSource || slugMatch.data.external_source_id !== input.externalSourceId)) {
+      throw new Error(`validation: Canonical path ${canonicalPath} is already owned by another source record.`);
+    }
+    foundExisting = slugMatch.data;
+    existing = foundExisting;
+  }
 
   let contentItemId = existing?.id as string | undefined;
+  let created = false;
+  const publicationMetadata = {
+    keywords: input.keywords ?? [],
+    media: input.media ?? [],
+    author: input.author ?? null,
+    tags: input.tags ?? [],
+    categories: input.categories ?? [],
+  };
+  const itemUpdate = {
+    type: input.contentType,
+    slug,
+    status: "published",
+    quality_score: input.qualityScore ?? null,
+    published_at: publishedAt,
+    published_url: publishedUrl,
+    hero_image_url: input.heroImageUrl ?? null,
+    destination: input.destination ?? null,
+    canonical_path: canonicalPath,
+    approved_content_hash: input.contentHash ?? null,
+    publication_metadata: publicationMetadata,
+    external_source: input.externalSource ?? null,
+    external_source_id: input.externalSourceId ?? null,
+  };
   if (contentItemId) {
     const { error } = await supabase
       .from("content_items")
-      .update({
-        type: input.contentType,
-        status: "published",
-        quality_score: input.qualityScore ?? null,
-        published_at: publishedAt,
-        hero_image_url: input.heroImageUrl ?? null,
-      })
+      .update(itemUpdate)
       .eq("id", contentItemId);
     if (error) throw error;
   } else {
@@ -113,48 +157,26 @@ export async function savePublishedContent(supabase: SupabaseClient, input: {
       .from("content_items")
       .insert({
         property_id: property.id,
-        type: input.contentType,
-        slug,
-        status: "published",
-        quality_score: input.qualityScore ?? null,
-        published_at: publishedAt,
-        source: "quick_generate",
-        hero_image_url: input.heroImageUrl ?? null,
+        ...itemUpdate,
+        source: input.externalSource ? "api" : "quick_generate",
+        external_source: input.externalSource ?? null,
+        external_source_id: input.externalSourceId ?? null,
       })
       .select("id")
       .single();
-    if (error) throw error;
-    contentItemId = data.id;
+    if (error && error.code === "23505" && input.externalSource && input.externalSourceId) {
+      const duplicate = await supabase.from("content_items").select("id,slug,status,published_at,published_url,approved_content_hash,external_source,external_source_id").eq("property_id", property.id).eq("external_source", input.externalSource).eq("external_source_id", input.externalSourceId).single();
+      if (duplicate.error || !duplicate.data) throw error;
+      existing = duplicate.data;
+      contentItemId = duplicate.data.id;
+      const { error: updateError } = await supabase.from("content_items").update(itemUpdate).eq("id", contentItemId);
+      if (updateError) throw updateError;
+    } else {
+      if (error) throw error;
+      contentItemId = data.id;
+      created = true;
+    }
   }
-
-  const { data: latestVersion, error: versionLookupError } = await supabase
-    .from("content_versions")
-    .select("version")
-    .eq("content_item_id", contentItemId)
-    .order("version", { ascending: false })
-    .limit(1)
-    .maybeSingle();
-  if (versionLookupError) throw versionLookupError;
-
-  const version = (latestVersion?.version ?? 0) + 1;
-  const { error: versionError } = await supabase.from("content_versions").insert({
-    content_item_id: contentItemId,
-    version,
-    title: input.title,
-    body_mdx: input.body,
-    excerpt: input.excerpt,
-    meta_title: input.metaTitle.slice(0, 60),
-    meta_description: input.metaDescription.slice(0, 155),
-    json_ld: {
-      "@context": "https://schema.org",
-      "@type": "Article",
-      headline: input.title,
-      description: input.metaDescription,
-      datePublished: publishedAt,
-      heroImageAlt: input.heroImageAlt ?? null,
-    },
-  });
-  if (versionError) throw versionError;
 
   const jsonLd = {
     "@context": "https://schema.org",
@@ -163,7 +185,51 @@ export async function savePublishedContent(supabase: SupabaseClient, input: {
     description: input.metaDescription,
     datePublished: publishedAt,
     heroImageAlt: input.heroImageAlt ?? null,
+    author: input.author ? { "@type": "Organization", name: input.author } : undefined,
+    keywords: (input.keywords ?? []).join(", "),
+    mainEntityOfPage: publishedUrl,
   };
+  let idempotentReplay = false;
+  let version: number;
+  const { data: matchingVersion, error: matchingVersionError } = input.contentHash
+    ? await supabase.from("content_versions").select("version").eq("content_item_id", contentItemId).eq("content_hash", input.contentHash).maybeSingle()
+    : { data: null, error: null };
+  if (matchingVersionError) throw matchingVersionError;
+  if (matchingVersion) {
+    version = matchingVersion.version;
+    idempotentReplay = true;
+  } else {
+    const { data: latestVersion, error: versionLookupError } = await supabase.from("content_versions").select("version").eq("content_item_id", contentItemId).order("version", { ascending: false }).limit(1).maybeSingle();
+    if (versionLookupError) throw versionLookupError;
+    version = (latestVersion?.version ?? 0) + 1;
+    const versionPayload = {
+      content_item_id: contentItemId,
+      version,
+      title: input.title,
+      body_mdx: input.body,
+      excerpt: input.excerpt,
+      meta_title: input.metaTitle,
+      meta_description: input.metaDescription,
+      json_ld: jsonLd,
+      content_hash: input.contentHash ?? null,
+      keywords: input.keywords ?? [],
+      media: input.media ?? [],
+      author_name: input.author ?? null,
+      tags: input.tags ?? [],
+      categories: input.categories ?? [],
+      destination: input.destination ?? null,
+      canonical_path: canonicalPath,
+      source_snapshot: input.sourceSnapshot ?? {},
+    };
+    const { error: versionError } = await supabase.from("content_versions").insert(versionPayload);
+    if (versionError && versionError.code === "23505" && input.contentHash) {
+      const duplicateVersion = await supabase.from("content_versions").select("version").eq("content_item_id", contentItemId).eq("content_hash", input.contentHash).single();
+      if (duplicateVersion.error || !duplicateVersion.data) throw versionError;
+      version = duplicateVersion.data.version;
+      idempotentReplay = true;
+    } else if (versionError) throw versionError;
+  }
+
   const { error: feedError } = await supabase.from("published_content_feed").upsert(
     {
       id: contentItemId,
@@ -173,13 +239,23 @@ export async function savePublishedContent(supabase: SupabaseClient, input: {
       title: input.title,
       body_mdx: input.body,
       excerpt: input.excerpt,
-      meta_title: input.metaTitle.slice(0, 60),
-      meta_description: input.metaDescription.slice(0, 155),
+      meta_title: input.metaTitle,
+      meta_description: input.metaDescription,
       faq: [],
       json_ld: jsonLd,
       hero_image_url: input.heroImageUrl ?? null,
       published_at: publishedAt,
       updated_at: new Date().toISOString(),
+      visible: true,
+      keywords: input.keywords ?? [],
+      media: input.media ?? [],
+      author_name: input.author ?? null,
+      tags: input.tags ?? [],
+      categories: input.categories ?? [],
+      destination: input.destination ?? null,
+      canonical_path: canonicalPath,
+      external_source_id: input.externalSourceId ?? null,
+      approved_content_hash: input.contentHash ?? null,
     },
     { onConflict: "id" },
   );
@@ -192,7 +268,7 @@ export async function savePublishedContent(supabase: SupabaseClient, input: {
       email: actor.email,
       type: actor.type ?? "user",
     },
-    action: existing ? "content.update_and_publish" : "content.create_and_publish",
+    action: idempotentReplay ? "content.publish_idempotent_replay" : created ? "content.create_and_publish" : "content.update_and_publish",
     version,
     changes: [
       { field: "title", before: null, after: input.title },
@@ -201,7 +277,7 @@ export async function savePublishedContent(supabase: SupabaseClient, input: {
       { field: "status", before: existing ? "published" : null, after: "published" },
       { field: "published_at", before: null, after: publishedAt },
     ],
-    metadata: { property: input.property, slug },
+    metadata: { property: input.property, slug, canonical_path: canonicalPath, destination: input.destination ?? null, external_source: input.externalSource ?? null, external_source_id: input.externalSourceId ?? null, approved_content_hash: input.contentHash ?? null, idempotent_replay: idempotentReplay },
   });
 
   return {
@@ -209,6 +285,9 @@ export async function savePublishedContent(supabase: SupabaseClient, input: {
     slug,
     version,
     publishedAt,
+    publishedUrl,
+    created,
+    idempotentReplay,
     deployHookUrl: property.revalidate_url as string | null,
   };
 }
